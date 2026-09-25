@@ -36,7 +36,9 @@ function describe(err: unknown, credentials: string): { message: string; auth: b
     return { message: err.message, auth: true };
   }
   if (isTransportError(err)) {
-    return { message: `Network problem (${safeErrorMessage(err)}); retrying next cycle.`, auth: false };
+    const c = (err as { cause?: { code?: string; name?: string; message?: string } }).cause;
+    const detail = c ? ` — ${[c.name, c.code, c.message].filter(Boolean).join(" ")}` : "";
+    return { message: `Network problem (${safeErrorMessage(err)}${safeErrorMessage(detail)}); retrying next cycle.`, auth: false };
   }
   return { message: safeErrorMessage(err), auth: false };
 }
