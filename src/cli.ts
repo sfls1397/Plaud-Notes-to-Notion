@@ -11,6 +11,7 @@ import { safeErrorMessage } from "./redact.js";
 import { buildProfileRuntime, openaiKey, readStatus } from "./runtime.js";
 import { createSecretStore, type SecretStore } from "./secrets.js";
 import { loadState, saveState } from "./state.js";
+import { scrubSsn } from "./scrub.js";
 import { runSync } from "./sync.js";
 
 const USAGE = `${PACKAGE_NAME} ${PACKAGE_VERSION}
@@ -25,6 +26,7 @@ Usage:
   ${PACKAGE_NAME} set-secret openai [--profile <p>] [--from-keychain <service>/<account>]
   ${PACKAGE_NAME} doctor --profile <p>                 Check sign-ins, Notion schema, OpenAI key
   ${PACKAGE_NAME} status                               Last poll/sync/write per profile
+  ${PACKAGE_NAME} scrub-ssn --profile <p> [--apply]    Find (dry run) or remove SSNs in existing rows
 
 Config: ${getConfigPath()}
 Log:    ${getLogFilePath()}`;
@@ -206,6 +208,18 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       const account = kind === "notion" ? notionAccount(profile as string) : profile ? openaiAccount(profile) : OPENAI_ACCOUNT;
       await store.set(account, value);
       console.log(`Saved ${kind} secret to ${store.describe()} account ${account}.`);
+      return 0;
+    }
+
+    case "scrub-ssn": {
+      const name = requireProfile(argv);
+      const profile = getProfile(loadConfig(), name);
+      const token = await store.get(notionAccount(profile.credentials));
+      if (!token) {
+        throw new Error(`No Notion token for ${profile.credentials}`);
+      }
+      const r = await scrubSsn({ token, dataSourceId: profile.notionDataSourceId, apply: flag(argv, "--apply"), log: (m) => log.info(m) });
+      console.log(`Scanned ${r.rowsScanned} rows; ${r.rowsAffected.length} affected; ${r.blocksUpdated} block(s) ${flag(argv, "--apply") ? "updated" : "would be updated"}.`);
       return 0;
     }
 
