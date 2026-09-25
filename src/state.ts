@@ -1,0 +1,50 @@
+import { STATE_KEEP_DAYS } from "./constants.js";
+import { getProfileStatePath, readJson, writeJsonAtomic } from "./paths.js";
+
+export interface FileState {
+  status: "pending" | "done" | "gave_up";
+  firstSeen: string;
+  name?: string;
+  recorded?: string;
+  /** Labels are computed once and reused on retries so Summary and Transcript always match. */
+  title?: string;
+  participants?: string[];
+  labelSource?: "llm" | "fallback";
+  llmAttempts: number;
+  summaryPageId?: string;
+  transcriptPageId?: string;
+  ssnRedactions?: number;
+  lastError?: string;
+  doneAt?: string;
+}
+
+export interface ProfileState {
+  version: 1;
+  files: Record<string, FileState>;
+  lastSyncAt?: string;
+  lastFullSyncAt?: string;
+}
+
+export function emptyState(): ProfileState {
+  return { version: 1, files: {} };
+}
+
+export function loadState(profile: string, env: NodeJS.ProcessEnv = process.env): ProfileState {
+  const raw = readJson<ProfileState>(getProfileStatePath(profile, env));
+  return raw && raw.version === 1 && raw.files ? raw : emptyState();
+}
+
+export function saveState(profile: string, state: ProfileState, env: NodeJS.ProcessEnv = process.env): void {
+  writeJsonAtomic(getProfileStatePath(profile, env), state);
+}
+
+/** Forget finished files after a month; the startAfter watermark keeps them from coming back. */
+export function pruneState(state: ProfileState, now: Date): void {
+  const cutoff = now.getTime() - STATE_KEEP_DAYS * 86_400_000;
+  for (const [id, f] of Object.entries(state.files)) {
+    const at = Date.parse(f.doneAt || f.firstSeen);
+    if (f.status !== "pending" && Number.isFinite(at) && at < cutoff) {
+      delete state.files[id];
+    }
+  }
+}
