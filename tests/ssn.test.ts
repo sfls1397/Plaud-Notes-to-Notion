@@ -80,6 +80,24 @@ describe("redactSsnAcross", () => {
     expect([...findSsnDigits(["last four of my social security number are 1984"])]).toEqual(["1984"]);
   });
 
+  it("never mistakes a date-of-birth year for the SSN (phone-tree prompt case)", () => {
+    const transcript = [
+      "Speaker 1 00:00:10",
+      "What are the last four digits of your social security number? Please provide your date of birth in the format January 1st, 1990.",
+      "Speaker 1 00:00:20",
+      "Thanks, that input could be too vague. Did you mean January 1st, 2000? Yes. Here's what I heard. Your last four of social is 0000, and your date of birth is January 1st, 2000."
+    ].join("\n");
+    const r = redactSsnAcross({ transcript, summary: "Verified with last four digits of his SSN (0000) and date of birth (January 1, 2000)." });
+    expect(r.texts.transcript).toContain("January 1st, 1990.");
+    expect(r.texts.transcript).toContain("Did you mean January 1st, 2000?");
+    expect(r.texts.transcript).toContain(`social is ${R}, and your date of birth is January 1st, 2000.`);
+    expect(r.texts.summary).toBe(`Verified with last four digits of his SSN (${R}) and date of birth (January 1, 2000).`);
+  });
+
+  it("still catches a year-shaped last four when it is not in a date", () => {
+    expect([...findSsnDigits(["Your last four of social is 1984, correct?"])]).toEqual(["1984"]);
+  });
+
   it("does nothing when there is nothing to find", () => {
     const r = redactSsnAcross({ summary: "## Core Synopsis\nNothing sensitive here.", transcript: "" });
     expect(r.count).toBe(0);
