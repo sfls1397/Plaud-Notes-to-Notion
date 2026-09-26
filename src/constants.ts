@@ -25,7 +25,7 @@ export const LLM_MAX_ATTEMPTS = 6;
 export const STATE_KEEP_DAYS = 30;
 
 export const DEFAULT_LLM_MODEL = "gpt-6-luna";
-export const DEFAULT_LLM_EFFORT = "max";
+export const DEFAULT_LLM_EFFORT = "high";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 /** Transcript characters sent to the labeler (names usually surface early). */
 export const LLM_TRANSCRIPT_CHARS = 24_000;
