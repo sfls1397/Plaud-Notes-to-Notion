@@ -106,6 +106,17 @@ function looksLikeYear(digits: string): boolean {
   return digits.length === 4 && /^(?:19|20)\d\d$/.test(digits);
 }
 
+const MONTH = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+/** "January 1st, 1990", "August 10, 1984", "born in 1984", "10/08/1984" — a year inside a date, not an SSN. */
+const DATE_BEFORE = new RegExp(
+  `(?:\\b${MONTH}\\.?\\s+\\w{1,9}(?:st|nd|rd|th)?,?\\s*|\\b(?:born|birth|birthday|year|dob)\\b[^.?!\\n]{0,30}|\\d{1,2}[/-]\\d{1,2}[/-])$`,
+  "i"
+);
+
+function isYearInDate(text: string, run: Run): boolean {
+  return looksLikeYear(run.digits) && DATE_BEFORE.test(text.slice(Math.max(0, run.start - 40), run.start));
+}
+
 function triggerEnds(text: string, re: RegExp): number[] {
   const ends: number[] = [];
   re.lastIndex = 0;
@@ -131,6 +142,7 @@ export function findSsnDigits(texts: string[]): Set<string> {
             r.start >= end &&
             r.start <= end + WINDOW_CHARS &&
             (r.digits.length === 4 || r.digits.length === 9) &&
+            !isYearInDate(text, r) &&
             (strong || !looksLikeYear(r.digits))
         );
         if (hit) {

@@ -1,4 +1,4 @@
-import { NOTION_VERSION } from "./constants.js";
+import { NOTION_TEXT_CHUNK, NOTION_VERSION } from "./constants.js";
 import { redactSecrets } from "./redact.js";
 import { findSsnDigits, redactDigits } from "./ssn.js";
 
@@ -90,14 +90,24 @@ export async function scrubSsn(options: {
       let mentions = 0;
       for (const block of blocks) {
         let changed = false;
-        const rich = block.rich.map((r) => {
+        // The Zap wrote whole transcripts as one run of up to ~11k chars; the API only
+        // accepts ≤2000 per run on write, so rewritten runs are re-split (same formatting).
+        const rich = block.rich.flatMap((r): Json[] => {
           const red = redactDigits(r.plain_text, found);
           if (!red.count || r.type !== "text") {
-            return r;
+            return [r as unknown as Json];
           }
           mentions += red.count;
           changed = true;
-          return { type: "text", text: { content: red.text, link: r.text?.link ?? null }, annotations: r.annotations };
+          const pieces: Json[] = [];
+          for (let i = 0; i < red.text.length; i += NOTION_TEXT_CHUNK) {
+            pieces.push({
+              type: "text",
+              text: { content: red.text.slice(i, i + NOTION_TEXT_CHUNK), link: r.text?.link ?? null },
+              annotations: r.annotations
+            });
+          }
+          return pieces;
         });
         if (changed) {
           result.blocksUpdated++;
