@@ -28,6 +28,18 @@ export interface ProfileState {
   lastFullSyncAt?: string;
   /** When the one-time cutover snapshot ran. */
   baselineAt?: string;
+  /**
+   * Summary page id → its Transcript sibling, as last seen live. Lets the sync
+   * notice a Summary that was moved to the trash and trash its Transcript too.
+   */
+  pairs?: Record<string, PairState>;
+}
+
+export interface PairState {
+  transcriptId: string;
+  minute: string;
+  /** Set when the service trashed the Transcript because its Summary was trashed. */
+  trashedAt?: string;
 }
 
 export function emptyState(): ProfileState {

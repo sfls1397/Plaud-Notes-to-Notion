@@ -39,6 +39,9 @@ export interface NotionStore {
   summariesEditedSince(sinceIso: string): Promise<NotionRow[]>;
   rowsRecordedSince(sinceIso: string): Promise<NotionRow[]>;
   updateRow(pageId: string, patch: { title?: string; participants?: string[] }): Promise<void>;
+  /** Queries never return trashed pages, so deletions are confirmed page by page. */
+  pageState(pageId: string): Promise<"live" | "trashed" | "unknown">;
+  setTrashed(pageId: string, inTrash: boolean): Promise<void>;
 }
 
 export class NotionError extends Error {
@@ -293,6 +296,23 @@ export class HttpNotionStore implements NotionStore {
     return this.queryAll({ property: "Recorded", date: { on_or_after: sinceIso } }, [
       { property: "Recorded", direction: "descending" }
     ]);
+  }
+
+  async pageState(pageId: string): Promise<"live" | "trashed" | "unknown"> {
+    try {
+      const page = await this.api("GET", `/pages/${pageId}`);
+      return page.in_trash === true || page.archived === true ? "trashed" : "live";
+    } catch (err) {
+      // 404 means permanently deleted *or* lost access — never treat that as a deletion.
+      if (err instanceof NotionError && err.status === 404) {
+        return "unknown";
+      }
+      throw err;
+    }
+  }
+
+  async setTrashed(pageId: string, inTrash: boolean): Promise<void> {
+    await this.api("PATCH", `/pages/${pageId}`, { in_trash: inTrash });
   }
 
   async updateRow(pageId: string, patch: { title?: string; participants?: string[] }): Promise<void> {

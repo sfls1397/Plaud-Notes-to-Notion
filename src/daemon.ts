@@ -11,7 +11,7 @@ import { safeErrorMessage } from "./redact.js";
 import { buildProfileRuntime, notifyMac, readStatus, SetupError, updateStatus, type ProfileRuntime } from "./runtime.js";
 import type { SecretStore } from "./secrets.js";
 import { loadState, pruneState, saveState } from "./state.js";
-import { runSync } from "./sync.js";
+import { runDeletionSync, runSync } from "./sync.js";
 
 const DEEP_SCAN_EVERY_MS = 10 * 60_000;
 const ALERT_EVERY_MS = 6 * 3_600_000;
@@ -186,6 +186,7 @@ export async function runDaemon(options: {
         t.nextSync = now + config.syncSeconds * 1000;
         try {
           await runSync({ profile: name, notion: rt.notion, state, save, log: plog });
+          await runDeletionSync({ profile: name, notion: rt.notion, state, save, log: plog });
           updateStatus(name, { lastSyncOkAt: new Date().toISOString() }, env);
         } catch (err) {
           if (reportError(name, profile.credentials, err)) {
