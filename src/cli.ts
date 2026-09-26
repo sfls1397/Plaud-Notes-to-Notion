@@ -12,7 +12,7 @@ import { buildProfileRuntime, openaiKey, readStatus } from "./runtime.js";
 import { createSecretStore, type SecretStore } from "./secrets.js";
 import { loadState, saveState } from "./state.js";
 import { scrubSsn } from "./scrub.js";
-import { runSync } from "./sync.js";
+import { runDeletionSync, runSync } from "./sync.js";
 
 const USAGE = `${PACKAGE_NAME} ${PACKAGE_VERSION}
 
@@ -176,7 +176,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       }
       const dryRun = flag(argv, "--dry-run");
       const r = await runSync({ profile: name, notion: rt.notion, state, save: () => saveState(name, state), log: (m) => log.info(m), dryRun });
-      console.log(JSON.stringify(r, null, 2));
+      const d = await runDeletionSync({ profile: name, notion: rt.notion, state, save: () => saveState(name, state), log: (m) => log.info(m), dryRun });
+      console.log(JSON.stringify({ ...r, deletions: d }, null, 2));
       return 0;
     }
 

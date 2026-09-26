@@ -46,7 +46,13 @@ export class FakePlaud implements PlaudClient {
 }
 
 export class FakeNotion implements NotionStore {
-  rows: Array<NotionRow & { body: string }> = [];
+  rows: Array<NotionRow & { body: string; inTrash?: boolean }> = [];
+  trashCalls: Array<{ id: string; inTrash: boolean }> = [];
+  /** Page ids that 404 on direct fetch (permanently deleted or no access). */
+  gone = new Set<string>();
+  private liveRows() {
+    return this.rows.filter((r) => !r.inTrash && !this.gone.has(r.id));
+  }
   failNextCreate: "summary" | "transcript" | null = null;
   updates: Array<{ id: string; patch: { title?: string; participants?: string[] } }> = [];
   private n = 0;
@@ -72,7 +78,7 @@ export class FakeNotion implements NotionStore {
 
   async rowsAtMinute(minuteIso: string): Promise<NotionRow[]> {
     const t = Date.parse(minuteIso);
-    return this.rows.filter((r) => r.recorded && Date.parse(r.recorded) >= t && Date.parse(r.recorded) < t + 60_000);
+    return this.liveRows().filter((r) => r.recorded && Date.parse(r.recorded) >= t && Date.parse(r.recorded) < t + 60_000);
   }
 
   async createSummary(row: NewRow, markdown: string) {
@@ -92,11 +98,27 @@ export class FakeNotion implements NotionStore {
   }
 
   async summariesEditedSince(sinceIso: string): Promise<NotionRow[]> {
-    return this.rows.filter((r) => r.types.includes("Summary") && r.lastEdited >= sinceIso);
+    return this.liveRows().filter((r) => r.types.includes("Summary") && r.lastEdited >= sinceIso);
   }
 
   async rowsRecordedSince(sinceIso: string): Promise<NotionRow[]> {
-    return this.rows.filter((r) => r.recorded && r.recorded >= sinceIso);
+    return this.liveRows().filter((r) => r.recorded && r.recorded >= sinceIso);
+  }
+
+  async pageState(pageId: string): Promise<"live" | "trashed" | "unknown"> {
+    const row = this.rows.find((r) => r.id === pageId);
+    if (!row || this.gone.has(pageId)) {
+      return "unknown";
+    }
+    return row.inTrash ? "trashed" : "live";
+  }
+
+  async setTrashed(pageId: string, inTrash: boolean): Promise<void> {
+    this.trashCalls.push({ id: pageId, inTrash });
+    const row = this.rows.find((r) => r.id === pageId);
+    if (row) {
+      row.inTrash = inTrash;
+    }
   }
 
   async updateRow(pageId: string, patch: { title?: string; participants?: string[] }): Promise<void> {
