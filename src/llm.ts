@@ -108,6 +108,8 @@ export class OpenAiLabeler implements Labeler {
         headers: { Authorization: `Bearer ${this.options.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: this.options.model,
+          // Don't let OpenAI keep the request/response (default is to store it).
+          store: false,
           reasoning: { effort: this.options.effort },
           input: buildLabelPrompt(input),
           text: { format: { type: "json_schema", name: "plaud_labels", strict: true, schema: SCHEMA } }
