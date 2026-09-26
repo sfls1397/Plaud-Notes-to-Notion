@@ -38,8 +38,10 @@ export interface ProfileState {
 export interface PairState {
   transcriptId: string;
   minute: string;
-  /** Set when the service trashed the Transcript because its Summary was trashed. */
+  /** Set once either side of the pair is in the trash; restoring either side restores both. */
   trashedAt?: string;
+  /** Which side(s) the service trashed, or "both" when both were trashed together. */
+  trashed?: "summary" | "transcript" | "both";
 }
 
 export function emptyState(): ProfileState {

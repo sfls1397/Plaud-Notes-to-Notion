@@ -67,71 +67,91 @@ describe("runDeletionSync", () => {
     log: () => undefined,
     now: () => new Date(now)
   });
-
-  it("trashes the Transcript when its Summary is moved to the trash", async () => {
+  const pair = () => {
     const notion = new FakeNotion();
     notion.rows.push(row("s1", "Summary", "Call", []), row("t1", "Transcript", "Call", []));
+    return notion;
+  };
+  const trash = (n: FakeNotion, id: string, v = true) => (n.rows.find((r) => r.id === id)!.inTrash = v);
+  const inTrash = (n: FakeNotion, id: string) => Boolean(n.rows.find((r) => r.id === id)?.inTrash);
+
+  it("deleting the Summary deletes the Transcript", async () => {
+    const notion = pair();
     const state = emptyState();
     expect((await runDeletionSync(base(notion, state))).tracked).toBe(1); // first pass only learns the pair
-    notion.rows.find((r) => r.id === "s1")!.inTrash = true;
+    trash(notion, "s1");
     const r = await runDeletionSync(base(notion, state));
-    expect(r.trashed).toEqual([{ transcriptId: "t1", minute: "2026-09-25T20:00:00.000Z" }]);
-    expect(notion.rows.find((r) => r.id === "t1")?.inTrash).toBe(true);
+    expect(r.trashed).toEqual([{ pageId: "t1", side: "transcript", minute: "2026-09-25T20:00:00.000Z" }]);
+    expect(inTrash(notion, "t1")).toBe(true);
   });
 
-  it("restores the Transcript when the Summary is restored from the trash", async () => {
-    const notion = new FakeNotion();
-    notion.rows.push(row("s1", "Summary", "Call", []), row("t1", "Transcript", "Call", []));
+  it("deleting the Transcript deletes the Summary", async () => {
+    const notion = pair();
     const state = emptyState();
     await runDeletionSync(base(notion, state));
-    notion.rows.find((r) => r.id === "s1")!.inTrash = true;
-    await runDeletionSync(base(notion, state));
-    notion.rows.find((r) => r.id === "s1")!.inTrash = false;
+    trash(notion, "t1");
     const r = await runDeletionSync(base(notion, state));
-    expect(r.restored).toHaveLength(1);
-    expect(notion.rows.find((r) => r.id === "t1")?.inTrash).toBe(false);
+    expect(r.trashed).toEqual([{ pageId: "s1", side: "summary", minute: "2026-09-25T20:00:00.000Z" }]);
+    expect(inTrash(notion, "s1")).toBe(true);
   });
 
-  it("never deletes a Summary when only the Transcript is trashed", async () => {
-    const notion = new FakeNotion();
-    notion.rows.push(row("s1", "Summary", "Call", []), row("t1", "Transcript", "Call", []));
+  it("restoring either side restores the other (both directions)", async () => {
+    for (const [deleted, restored, partner] of [["s1", "s1", "t1"], ["s1", "t1", "s1"], ["t1", "t1", "s1"], ["t1", "s1", "t1"]]) {
+      const notion = pair();
+      const state = emptyState();
+      await runDeletionSync(base(notion, state));
+      trash(notion, deleted);
+      await runDeletionSync(base(notion, state)); // partner auto-trashed
+      expect(inTrash(notion, "s1") && inTrash(notion, "t1")).toBe(true);
+      trash(notion, restored, false); // user restores one side from the trash
+      const r = await runDeletionSync(base(notion, state));
+      expect(r.restored.map((x) => x.pageId)).toEqual([partner]);
+      expect(inTrash(notion, "s1") || inTrash(notion, "t1")).toBe(false);
+    }
+  });
+
+  it("when both were deleted by hand, restoring one restores the other", async () => {
+    const notion = pair();
     const state = emptyState();
     await runDeletionSync(base(notion, state));
-    notion.rows.find((r) => r.id === "t1")!.inTrash = true;
-    await runDeletionSync(base(notion, state));
-    expect(notion.trashCalls).toEqual([]);
-    expect(notion.rows.find((r) => r.id === "s1")?.inTrash).toBeFalsy();
-  });
-
-  it("does nothing when a Summary 404s (lost access / permanent delete) instead of being in the trash", async () => {
-    const notion = new FakeNotion();
-    notion.rows.push(row("s1", "Summary", "Call", []), row("t1", "Transcript", "Call", []));
-    const state = emptyState();
-    await runDeletionSync(base(notion, state));
-    notion.gone.add("s1");
+    trash(notion, "s1");
+    trash(notion, "t1");
     const r = await runDeletionSync(base(notion, state));
-    expect(r.trashed).toEqual([]);
-    expect(notion.trashCalls).toEqual([]);
+    expect(r.trashed).toEqual([]); // nothing left to trash
+    trash(notion, "t1", false);
+    await runDeletionSync(base(notion, state));
+    expect(inTrash(notion, "s1")).toBe(false);
   });
 
-  it("does not touch Transcripts in ambiguous minutes or with no Summary pair ever seen", async () => {
+  it("does nothing when a page 404s (lost access / permanent delete) instead of being in the trash", async () => {
+    for (const id of ["s1", "t1"]) {
+      const notion = pair();
+      const state = emptyState();
+      await runDeletionSync(base(notion, state));
+      notion.gone.add(id);
+      const r = await runDeletionSync(base(notion, state));
+      expect(r.trashed).toEqual([]);
+      expect(notion.trashCalls).toEqual([]);
+    }
+  });
+
+  it("does not touch ambiguous minutes or orphan Transcripts", async () => {
     const notion = new FakeNotion();
     notion.rows.push(row("s1", "Summary", "A", []), row("s2", "Summary", "B", []), row("t1", "Transcript", "A", []));
     notion.rows.push(row("t9", "Transcript", "Orphan", [], "2026-09-24T10:00:00.000Z"));
     const state = emptyState();
-    const r = await runDeletionSync(base(notion, state));
-    expect(r.tracked).toBe(0);
-    notion.rows.find((r) => r.id === "s1")!.inTrash = true;
+    expect((await runDeletionSync(base(notion, state))).tracked).toBe(0);
+    trash(notion, "s1");
+    trash(notion, "t9");
     await runDeletionSync(base(notion, state));
     expect(notion.trashCalls).toEqual([]);
   });
 
   it("dry run reports but changes nothing", async () => {
-    const notion = new FakeNotion();
-    notion.rows.push(row("s1", "Summary", "Call", []), row("t1", "Transcript", "Call", []));
+    const notion = pair();
     const state = emptyState();
     await runDeletionSync(base(notion, state));
-    notion.rows.find((r) => r.id === "s1")!.inTrash = true;
+    trash(notion, "t1");
     const r = await runDeletionSync({ ...base(notion, state), dryRun: true });
     expect(r.trashed).toHaveLength(1);
     expect(notion.trashCalls).toEqual([]);
