@@ -18,7 +18,7 @@ No Zapier, no extra runtime dependencies (Node ≥ 20 built-ins only).
 | **SSN redaction** (summary, transcript, title) | — (new) | Written *and* spoken digits, incl. answers in the next speaker's line. Runs before anything leaves the Mac. |
 | Remove `PLAUD NOTE`; pair quotes `“…”` | 3–4. Formatter Text | The Zap turned every `"` into `”`. |
 | Strip Plaud image embeds, `---`, blank lines; split `> **Label:** text` | 5. Code (JavaScript) | Ported verbatim. |
-| Title + Participants via **GPT-6 Luna, max effort**, strict JSON | 6. AI by Zapier | Also sees the transcript (names often only appear there) and the database's existing Participant spellings (e.g. `Casey - Bank`). Owner and `Speaker N` labels never listed. |
+| Title + Participants via **GPT-6 Luna, high effort**, strict JSON | 6. AI by Zapier | Also sees the transcript (names often only appear there) and the database's existing Participant spellings (e.g. `Casey - Bank`). Owner and `Speaker N` labels never listed. |
 | Create **Summary** row (Notion markdown API) | 7. Notion | Block-for-block identical to the Zap's output. |
 | Create **Transcript** row (one plain-text paragraph) | 8. Notion | Exact text — `*`, `_`, `#` in speech can never turn into formatting. |
 | Summary → Transcript sync every **5 min** | Grok *Sync Plaud Transcripts to Summaries* (retired) | Pair by `Recorded` minute; skip ambiguous minutes; full 90-day reconcile daily. |
@@ -37,7 +37,7 @@ Plaud's own title; recordings still generating are re-checked every poll (up to
   "pollSeconds": 30,
   "syncSeconds": 300,
   "llmModel": "gpt-6-luna",
-  "llmEffort": "max",
+  "llmEffort": "high",
   "profiles": {
     "peter": { "enabled": true,  "owner": "Peter", "notionDataSourceId": "<Plaud Notes data source id>", "startAfter": "<cutover ISO time>" },
     "tim":   { "enabled": false, "owner": "Tim",   "notionDataSourceId": "<Tim's Plaud Notes data source id>", "startAfter": "<cutover ISO time>" }

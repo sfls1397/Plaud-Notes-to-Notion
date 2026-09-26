@@ -92,7 +92,7 @@ export function parseLabels(text: string): RecordingLabels {
   };
 }
 
-/** OpenAI Responses API — GPT-6 Luna at max reasoning effort by default. */
+/** OpenAI Responses API — GPT-6 Luna at high reasoning effort by default (same labels as max on a 9-recording test, ~3.5× fewer output tokens). */
 export class OpenAiLabeler implements Labeler {
   constructor(
     private readonly options: {
