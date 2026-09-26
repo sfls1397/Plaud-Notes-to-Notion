@@ -114,7 +114,7 @@ row.participants = patch.participants;
 export class FakeLabeler implements Labeler {
 calls: LabelInput[] = [];
 failures = 0;
-constructor(private readonly result: RecordingLabels = { title: "A Short Call", participants: ["Sam", "Alex Example"] }) {}
+constructor(private readonly result: RecordingLabels = { participants: ["Sam", "Alex Example"] }) {}
 async label(input: LabelInput): Promise<RecordingLabels> {
 this.calls.push(input);
 if (this.failures > 0) {

@@ -3,8 +3,8 @@ import {
   cleanParticipants,
   cleanSummaryMarkdown,
   cleanTitle,
-  fallbackTitle,
   formatTranscript,
+  meetingTitle,
   recordedMinute
 } from "./format.js";
 import type { Labeler } from "./llm.js";
@@ -169,22 +169,21 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
         transcriptText: prepared.transcriptText,
         knownParticipants: notionSchema.participantOptions
       });
-      st.title = cleanTitle(labels.title) || fallbackTitle(prepared.plaudTitle);
       st.participants = cleanParticipants(labels.participants, deps.owner);
       st.labelSource = "llm";
     } catch (err) {
       st.llmAttempts++;
       st.lastError = safeErrorMessage(err);
       if (st.llmAttempts < LLM_MAX_ATTEMPTS) {
-        deps.log(`[${deps.profile}] labeling failed for "${prepared.plaudTitle}" (attempt ${st.llmAttempts}/${LLM_MAX_ATTEMPTS}): ${st.lastError}`);
+        deps.log(`[${deps.profile}] participant labeling failed for "${prepared.plaudTitle}" (attempt ${st.llmAttempts}/${LLM_MAX_ATTEMPTS}): ${st.lastError}`);
         result.pending++;
         return;
       }
-      st.title = fallbackTitle(prepared.plaudTitle);
       st.participants = [];
       st.labelSource = "fallback";
-      deps.log(`[${deps.profile}] labeling failed ${LLM_MAX_ATTEMPTS}x; writing "${st.title}" with Plaud's title and no participants`);
+      deps.log(`[${deps.profile}] participant labeling failed ${LLM_MAX_ATTEMPTS}x; writing "${prepared.plaudTitle}" with no participants`);
     }
+    st.title = cleanTitle(meetingTitle(prepared.plaudTitle));
     deps.save();
   }
 

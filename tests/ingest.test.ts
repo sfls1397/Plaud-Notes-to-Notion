@@ -34,7 +34,7 @@ describe("runIngest", () => {
     expect(s.types).toEqual(["Summary"]);
     expect(t.types).toEqual(["Transcript"]);
     for (const row of [s, t]) {
-      expect(row.title).toBe("A Short Call");
+      expect(row.title).toBe("Recording of_1"); // Plaud's "09-25 Recording of_1" minus the date
       expect(row.participants).toEqual(["Sam"]); // owner stripped
       expect(row.recorded).toBe("2026-09-26T14:50:00.000Z");
     }
@@ -117,22 +117,19 @@ describe("runIngest", () => {
   });
 
   it("writes two different recordings that start in the same minute", async () => {
-    const d = deps({ labeler: undefined as never });
-    let n = 0;
-    d.labeler = new FakeLabeler();
-    d.labeler.label = async () => ({ title: `Call ${++n}`, participants: [] });
-    d.plaud.add({ id: "a", startAt: new Date("2026-09-26T14:50:05Z"), createdAt: new Date("2026-09-26T15:00:00Z") });
-    d.plaud.add({ id: "b", startAt: new Date("2026-09-26T14:50:40Z"), createdAt: new Date("2026-09-26T15:00:30Z") });
+    const d = deps();
+    d.plaud.add({ id: "a", name: "09-26 Call One", startAt: new Date("2026-09-26T14:50:05Z"), createdAt: new Date("2026-09-26T15:00:00Z") });
+    d.plaud.add({ id: "b", name: "09-26 Call Two", startAt: new Date("2026-09-26T14:50:40Z"), createdAt: new Date("2026-09-26T15:00:30Z") });
     await runIngest(d);
     expect(d.notion.rows.map((r) => `${r.types[0]}:${r.title}`)).toEqual([
-      "Summary:Call 1",
-      "Transcript:Call 1",
-      "Summary:Call 2",
-      "Transcript:Call 2"
+      "Summary:Call One",
+      "Transcript:Call One",
+      "Summary:Call Two",
+      "Transcript:Call Two"
     ]);
   });
 
-  it("retries labeling, then falls back to Plaud's title so the recording is never lost", async () => {
+  it("retries participant labeling, then writes with no participants so the recording is never lost", async () => {
     const d = deps();
     d.plaud.add({ id: "of_1", name: "09-26 Budget Review With Jim" });
     d.labeler.failures = 99;
