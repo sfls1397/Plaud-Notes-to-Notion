@@ -120,24 +120,23 @@ export async function runSync(deps: SyncDeps): Promise<SyncResult> {
 }
 
 export interface DeletionResult {
-  trashed: Array<{ transcriptId: string; minute: string }>;
-  restored: Array<{ transcriptId: string; minute: string }>;
+  trashed: Array<{ pageId: string; side: "summary" | "transcript"; minute: string }>;
+  restored: Array<{ pageId: string; side: "summary" | "transcript"; minute: string }>;
   tracked: number;
 }
 
-/** How long a Transcript the service trashed stays eligible for restore (Notion keeps trash ~30 days). */
+/** How long a trashed pair stays eligible for restore (Notion keeps trash ~30 days). */
 const RESTORE_WINDOW_MS = 30 * 86_400_000;
 
 /**
- * Deleting a Summary deletes its Transcript; restoring the Summary from the
- * trash restores it. One-way, like the title sync: trashing a Transcript alone
- * never touches its Summary.
+ * A Summary and its Transcript live and die together: trash either one and the
+ * other is trashed; restore either one from the trash and the other comes back.
  *
  * Notion queries never return trashed pages, so every cycle this remembers the
  * live Summary↔Transcript pairs (same Recorded minute, exactly one of each) and
- * checks any remembered Summary that stopped appearing. It only acts when
- * Notion explicitly reports that Summary as in the trash — a 404 (permanent
- * delete, or lost access) is never treated as a deletion.
+ * checks any remembered page that stopped appearing. It only acts when Notion
+ * explicitly reports that page as in the trash — a 404 (permanent delete, or
+ * lost access) is never treated as a deletion.
  */
 export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
   const now = (deps.now || (() => new Date()))();
@@ -146,41 +145,67 @@ export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
   const since = new Date(now.getTime() - SYNC_FULL_WINDOW_DAYS * 86_400_000).toISOString();
   const rows = await deps.notion.rowsRecordedSince(since);
   const live = new Set(rows.map((r) => r.id));
+  const verb = (v: string) => (deps.dryRun ? `DRY RUN would ${v}` : v);
+
+  const setTrashed = async (pageId: string, side: "summary" | "transcript", minute: string, inTrash: boolean, why: string) => {
+    if (!deps.dryRun) {
+      await deps.notion.setTrashed(pageId, inTrash);
+    }
+    (inTrash ? result.trashed : result.restored).push({ pageId, side, minute });
+    deps.log(`[${deps.profile}] ${verb(inTrash ? "trash" : "restore")} ${side === "summary" ? "Summary" : "Transcript"} ${minute} (${why})`);
+  };
 
   for (const [summaryId, pair] of Object.entries(pairs)) {
+    const summaryLive = live.has(summaryId);
+    const transcriptLive = live.has(pair.transcriptId);
+
     if (pair.trashedAt) {
-      if (live.has(summaryId)) {
-        if (!deps.dryRun) {
-          await deps.notion.setTrashed(pair.transcriptId, false);
-          delete pair.trashedAt;
+      if (summaryLive || transcriptLive) {
+        // One side came back from the trash: bring the other back too.
+        if (!summaryLive) {
+          await setTrashed(summaryId, "summary", pair.minute, false, "its Transcript was restored");
         }
-        result.restored.push({ transcriptId: pair.transcriptId, minute: pair.minute });
-        deps.log(`[${deps.profile}] ${deps.dryRun ? "DRY RUN would restore" : "restored"} Transcript ${pair.minute} (its Summary came back from the trash)`);
+        if (!transcriptLive) {
+          await setTrashed(pair.transcriptId, "transcript", pair.minute, false, "its Summary was restored");
+        }
+        if (!deps.dryRun) {
+          delete pair.trashedAt;
+          delete pair.trashed;
+        }
       } else if (now.getTime() - Date.parse(pair.trashedAt) > RESTORE_WINDOW_MS) {
         delete pairs[summaryId];
       }
       continue;
     }
-    if (live.has(summaryId)) {
+
+    if (summaryLive && transcriptLive) {
       continue;
     }
-    if (!live.has(pair.transcriptId)) {
-      delete pairs[summaryId]; // both gone or aged out of the window — nothing to do
-      continue;
-    }
-    const state = await deps.notion.pageState(summaryId);
-    if (state === "trashed") {
+    const summaryState = summaryLive ? "live" : await deps.notion.pageState(summaryId);
+    const transcriptState = transcriptLive ? "live" : await deps.notion.pageState(pair.transcriptId);
+
+    if (summaryState === "trashed" && transcriptState === "live") {
+      await setTrashed(pair.transcriptId, "transcript", pair.minute, true, "its Summary was deleted");
       if (!deps.dryRun) {
-        await deps.notion.setTrashed(pair.transcriptId, true);
         pair.trashedAt = now.toISOString();
+        pair.trashed = "transcript";
       }
-      result.trashed.push({ transcriptId: pair.transcriptId, minute: pair.minute });
-      deps.log(`[${deps.profile}] ${deps.dryRun ? "DRY RUN would trash" : "trashed"} Transcript ${pair.minute} (its Summary was deleted)`);
-    } else if (state === "unknown") {
-      deps.log(`[${deps.profile}] Summary for ${pair.minute} is no longer visible (not in trash); leaving its Transcript alone`);
-      delete pairs[summaryId];
+    } else if (transcriptState === "trashed" && summaryState === "live") {
+      await setTrashed(summaryId, "summary", pair.minute, true, "its Transcript was deleted");
+      if (!deps.dryRun) {
+        pair.trashedAt = now.toISOString();
+        pair.trashed = "summary";
+      }
+    } else if (summaryState === "trashed" && transcriptState === "trashed") {
+      if (!deps.dryRun) {
+        pair.trashedAt = now.toISOString(); // both deleted by hand — still restore together
+        pair.trashed = "both";
+      }
     } else {
-      delete pairs[summaryId]; // still live, just moved (e.g. Recorded edited) — re-paired below
+      if (summaryState === "unknown" || transcriptState === "unknown") {
+        deps.log(`[${deps.profile}] a page for ${pair.minute} is no longer visible (not in trash); leaving its partner alone`);
+      }
+      delete pairs[summaryId]; // aged out of the window, moved (Recorded edited), or not visible — re-paired below if live
     }
   }
 
@@ -194,7 +219,7 @@ export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
   for (const [minute, group] of groups) {
     const summaries = group.filter((r) => r.types.includes(TYPE_SUMMARY));
     const transcripts = group.filter((r) => r.types.includes(TYPE_TRANSCRIPT) && !r.types.includes(TYPE_SUMMARY));
-    if (summaries.length === 1 && transcripts.length === 1) {
+    if (summaries.length === 1 && transcripts.length === 1 && !pairs[summaries[0].id]?.trashedAt) {
       pairs[summaries[0].id] = { transcriptId: transcripts[0].id, minute };
     }
   }
