@@ -82,8 +82,8 @@ export function recordedMinute(startAt: Date): string {
   return d.toISOString();
 }
 
-/** Plaud's own title minus its `MM-DD ` date prefix — used only if labeling keeps failing. */
-export function fallbackTitle(plaudName: string): string {
+/** Meeting title: Plaud's own title minus its leading `MM-DD ` date (Peter 2026-09-26). */
+export function meetingTitle(plaudName: string): string {
   const t = plaudName.replace(/^\d{2}-\d{2}\s+/, "").trim();
   return t || "Untitled recording";
 }

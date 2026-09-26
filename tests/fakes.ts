@@ -114,7 +114,7 @@ export class FakeNotion implements NotionStore {
 export class FakeLabeler implements Labeler {
   calls: LabelInput[] = [];
   failures = 0;
-  constructor(private readonly result: RecordingLabels = { title: "A Short Call", participants: ["Sam", "Peter"] }) {}
+  constructor(private readonly result: RecordingLabels = { participants: ["Sam", "Peter"] }) {}
   async label(input: LabelInput): Promise<RecordingLabels> {
     this.calls.push(input);
     if (this.failures > 0) {

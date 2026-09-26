@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   cleanParticipants,
   cleanSummaryMarkdown,
-  fallbackTitle,
+  meetingTitle,
   formatOffset,
   formatTranscript,
   recordedMinute,
@@ -82,16 +82,16 @@ describe("recordedMinute", () => {
   });
 });
 
-describe("cleanParticipants / fallbackTitle", () => {
+describe("cleanParticipants / meetingTitle", () => {
   it("removes the owner, generic labels, commas and duplicates", () => {
     expect(cleanParticipants(["Peter", "Speaker 3", "Casey - Bank", "casey - bank", "Smith, John", "peter"], "Peter")).toEqual([
       "Casey - Bank",
       "Smith John"
     ]);
   });
-  it("strips Plaud's date prefix", () => {
-    expect(fallbackTitle("09-25 Failed Sales Call: Prospect's Expertise Disqualifies Offer")).toBe(
-      "Failed Sales Call: Prospect's Expertise Disqualifies Offer"
-    );
+  it("is Plaud's title with only the leading date removed", () => {
+    expect(meetingTitle("09-25 Casual Chat: Scheduling a Meet-Up with Peter")).toBe("Casual Chat: Scheduling a Meet-Up with Peter");
+    expect(meetingTitle("Jade Mentoring at TallGrass")).toBe("Jade Mentoring at TallGrass");
+    expect(meetingTitle("T1U2 CGM")).toBe("T1U2 CGM");
   });
 });

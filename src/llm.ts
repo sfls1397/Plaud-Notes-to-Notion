@@ -1,7 +1,6 @@
 import { LLM_TRANSCRIPT_CHARS } from "./constants.js";
 
 export interface RecordingLabels {
-  title: string;
   participants: string[];
 }
 
@@ -31,17 +30,17 @@ export class LlmError extends Error {
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "participants"],
+  required: ["participants"],
   properties: {
-    title: { type: "string" },
     participants: { type: "array", items: { type: "string" } }
   }
 } as const;
 
 /**
- * Replaces the Zap's "Extract meeting details" step. Same title/participant
- * rules, plus: the transcript (names often only appear there), the database's
- * existing participant spellings, and a strict JSON schema.
+ * Replaces the Zap's "Extract meeting details" step for Participants (the
+ * Meeting title is Plaud's own, minus its date). Same participant rules, plus:
+ * the transcript (names often only appear there), the database's existing
+ * participant spellings, and a strict JSON schema.
  */
 export function buildLabelPrompt(input: LabelInput): string {
   const owner = input.owner;
@@ -52,9 +51,8 @@ export function buildLabelPrompt(input: LabelInput): string {
       : input.transcriptText;
   return `You label one Plaud recording for ${owner}'s Notion archive. ${owner} owns the recorder and is implicit in every recording.
 
-Return two fields:
-1. title: a concise, specific title that captures the actual subject. Do not include the date. Do not use generic wording such as "casual conversation", "meeting", "SOAP note", "follow-up", or "summary".
-2. participants: the people (or organizations/sources) actually speaking in or directly present for this conversation.
+Return one field:
+participants: the people (or organizations/sources) actually speaking in or directly present for this conversation.
    - Never include ${owner}, even if ${owner} is a named speaker or the recording misspells ${owner}'s name.
    - Do not include people who are only mentioned, discussed, or referenced in a story being recounted (family, coworkers, friends in an anecdote) unless they also speak.
    - Preserve customary spelling and titles.
@@ -82,14 +80,11 @@ export function parseLabels(text: string): RecordingLabels {
   } catch {
     throw new LlmError("Labeler returned non-JSON output", true);
   }
-  const rec = parsed as { title?: unknown; participants?: unknown };
-  if (typeof rec.title !== "string" || !rec.title.trim() || !Array.isArray(rec.participants)) {
-    throw new LlmError("Labeler output missing title/participants", true);
+  const rec = parsed as { participants?: unknown };
+  if (!Array.isArray(rec.participants)) {
+    throw new LlmError("Labeler output missing participants", true);
   }
-  return {
-    title: rec.title,
-    participants: rec.participants.filter((p): p is string => typeof p === "string")
-  };
+  return { participants: rec.participants.filter((p): p is string => typeof p === "string") };
 }
 
 /** OpenAI Responses API — GPT-6 Luna at high reasoning effort by default (same labels as max on a 9-recording test, ~3.5× fewer output tokens). */
