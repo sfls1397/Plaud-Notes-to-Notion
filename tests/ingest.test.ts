@@ -48,7 +48,7 @@ describe("runIngest", () => {
     d.plaud.add({ id: "new" });
     await runIngest(d);
     expect(d.notion.rows.map((r) => r.types[0])).toEqual(["Summary", "Transcript"]);
-    expect(d.state.files.old).toBeUndefined();
+    expect(d.state.files.old.status).toBe("baseline");
   });
 
   it("waits while Plaud is still generating the summary, then writes once ready", async () => {
@@ -166,5 +166,33 @@ describe("runIngest", () => {
     d.plaud.add({ id: "late", startAt: new Date("2026-09-24T09:00:00Z"), createdAt: new Date("2026-09-26T14:59:00Z") });
     expect((await runIngest(d)).written).toHaveLength(0); // page 1 only
     expect((await runIngest(d, { deep: true })).written.map((w) => w.id)).toEqual(["late"]);
+  });
+});
+
+describe("cutover snapshot and late summaries", () => {
+  it("never writes recordings finished before cutover, but writes an old one whose summary arrives later", async () => {
+    const d = deps();
+    d.plaud.add({ id: "zap-era", createdAt: new Date("2026-09-20T10:00:00Z"), startAt: new Date("2026-09-20T09:00:00Z") });
+    d.plaud.add({ id: "old-no-summary", createdAt: new Date("2026-09-15T21:20:00Z"), startAt: new Date("2026-09-15T21:13:00Z"), summaryMarkdown: null });
+    await runIngest(d);
+    expect(d.state.files["zap-era"].status).toBe("baseline");
+    expect(d.state.files["old-no-summary"]).toMatchObject({ status: "pending", slow: true });
+    expect(d.notion.rows).toHaveLength(0);
+    d.plaud.recordings.get("old-no-summary")!.summaryMarkdown = "## Core Synopsis\nGenerated later.";
+    expect((await runIngest(d)).written).toHaveLength(0); // slow items wait for a deep scan
+    expect((await runIngest(d, { deep: true })).written.map((w) => w.id)).toEqual(["old-no-summary"]);
+    expect(d.notion.rows.map((r) => r.recorded)).toEqual(["2026-09-15T21:13:00.000Z", "2026-09-15T21:13:00.000Z"]);
+  });
+
+  it("keeps watching a new recording past 48h instead of giving up", async () => {
+    let now = new Date("2026-09-26T15:01:00Z");
+    const d = deps({ now: () => now });
+    d.plaud.add({ id: "slow", summaryMarkdown: null });
+    await runIngest(d);
+    now = new Date("2026-09-29T15:01:00Z");
+    await runIngest(d);
+    expect(d.state.files.slow).toMatchObject({ status: "pending", slow: true });
+    d.plaud.recordings.get("slow")!.summaryMarkdown = "## Core Synopsis\nFinally.";
+    expect((await runIngest(d, { deep: true })).written).toHaveLength(1);
   });
 });

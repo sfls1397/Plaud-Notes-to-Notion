@@ -1,4 +1,4 @@
-import { LLM_MAX_ATTEMPTS, PENDING_GIVE_UP_HOURS, TYPE_SUMMARY, TYPE_TRANSCRIPT } from "./constants.js";
+import { LLM_MAX_ATTEMPTS, PENDING_FAST_HOURS, TYPE_SUMMARY, TYPE_TRANSCRIPT, WATCH_DAYS } from "./constants.js";
 import {
   cleanParticipants,
   cleanSummaryMarkdown,
@@ -35,37 +35,78 @@ export interface IngestResult {
   errors: string[];
 }
 
-const DEEP_SCAN_PAGES = 10;
-const DEEP_SCAN_DAYS = 7;
+const DEEP_SCAN_PAGES = 15;
 
 /**
- * New files (uploaded at/after startAfter) not finished yet, oldest upload first.
- * Plaud lists by recording start, so an offline recording synced late can sit
- * below page 1: a deep scan walks back DEEP_SCAN_DAYS of recordings to catch it.
+ * Files to look at this cycle, oldest upload first:
+ *  - new files (uploaded at/after startAfter) not seen yet;
+ *  - files still waiting on Plaud (no summary/transcript yet) — every cycle while
+ *    fresh, only on deep scans once they are "slow" (older than PENDING_FAST_HOURS).
+ * Plaud lists by recording start, so a deep scan (every 10 min) walks back
+ * WATCH_DAYS to catch late uploads and summaries generated late on old recordings.
  */
 async function candidates(deps: IngestDeps, deep: boolean): Promise<PlaudFileListing[]> {
   const now = (deps.now || (() => new Date()))();
-  const floor = new Date(now.getTime() - DEEP_SCAN_DAYS * 86_400_000);
+  const floor = new Date(now.getTime() - WATCH_DAYS * 86_400_000);
   const out: PlaudFileListing[] = [];
   const pages = deep ? DEEP_SCAN_PAGES : 1;
   for (let page = 1; page <= pages; page++) {
     const list = await deps.plaud.listFiles(page, 20);
     for (const f of list) {
       const uploaded = f.createdAt || f.startAt;
-      if (!uploaded || uploaded < deps.startAfter) {
-        continue;
-      }
       const st = deps.state.files[f.id];
-      if (!st || st.status === "pending") {
+      if (st) {
+        if (st.status === "pending" && (deep || !st.slow)) {
+          out.push(f);
+        }
+      } else if (uploaded && uploaded >= deps.startAfter) {
         out.push(f);
       }
     }
     const oldest = list.at(-1)?.startAt;
-    if (list.length < 20 || !oldest || oldest < floor || oldest < new Date(deps.startAfter.getTime() - DEEP_SCAN_DAYS * 86_400_000)) {
+    if (list.length < 20 || !oldest || oldest < floor) {
       break;
     }
   }
   return out.sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
+}
+
+/**
+ * One-time snapshot at cutover: every recording from the last WATCH_DAYS that was
+ * uploaded before startAfter. Ones Plaud has already finished belonged to the Zap
+ * ("baseline", never written). Ones still without a summary/transcript go on the
+ * slow watch list, so a summary generated later is still written — as the Zap did.
+ */
+export async function runBaseline(deps: IngestDeps): Promise<{ baseline: number; watching: number }> {
+  const now = (deps.now || (() => new Date()))();
+  const floor = new Date(now.getTime() - WATCH_DAYS * 86_400_000);
+  let baseline = 0;
+  let watching = 0;
+  for (let page = 1; page <= DEEP_SCAN_PAGES; page++) {
+    const list = await deps.plaud.listFiles(page, 20);
+    for (const f of list) {
+      const uploaded = f.createdAt || f.startAt;
+      if (deps.state.files[f.id] || !uploaded || uploaded >= deps.startAfter) {
+        continue;
+      }
+      const rec = await deps.plaud.getRecording(f.id);
+      const ready = Boolean(rec.summaryMarkdown && rec.segments.length > 0 && rec.startAt);
+      deps.state.files[f.id] = ready
+        ? { status: "baseline", firstSeen: now.toISOString(), name: rec.name, llmAttempts: 0 }
+        : { status: "pending", slow: true, firstSeen: now.toISOString(), name: rec.name, llmAttempts: 0 };
+      ready ? baseline++ : watching++;
+    }
+    const oldest = list.at(-1)?.startAt;
+    if (list.length < 20 || !oldest || oldest < floor) {
+      break;
+    }
+  }
+  if (!deps.dryRun) {
+    deps.state.baselineAt = now.toISOString();
+    deps.save();
+  }
+  deps.log(`[${deps.profile}] baseline: ${baseline} recording(s) already handled before cutover; watching ${watching} still without a summary`);
+  return { baseline, watching };
 }
 
 /** A row we (or a crashed earlier attempt) already wrote: same minute, same Type, same title. */
@@ -103,13 +144,11 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
   st.name = rec.name;
   if (!rec.summaryMarkdown || rec.segments.length === 0 || !rec.startAt) {
     const waitedH = (now.getTime() - Date.parse(st.firstSeen)) / 3_600_000;
-    if (waitedH > PENDING_GIVE_UP_HOURS) {
-      st.status = "gave_up";
-      st.lastError = `Plaud never produced ${!rec.summaryMarkdown ? "a summary" : "a transcript"} within ${PENDING_GIVE_UP_HOURS}h`;
-      deps.log(`[${deps.profile}] gave up on "${rec.name}": ${st.lastError}`);
-    } else {
-      result.pending++;
+    if (!st.slow && waitedH > PENDING_FAST_HOURS) {
+      st.slow = true;
+      deps.log(`[${deps.profile}] "${rec.name}" still has no ${!rec.summaryMarkdown ? "summary" : "transcript"} after ${PENDING_FAST_HOURS}h; checking it every 10 min instead`);
     }
+    result.pending++;
     return;
   }
 
@@ -195,6 +234,9 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
 export async function runIngest(deps: IngestDeps, options: { deep?: boolean } = {}): Promise<IngestResult> {
   const now = (deps.now || (() => new Date()))();
   const result: IngestResult = { checked: 0, written: [], pending: 0, errors: [] };
+  if (!deps.state.baselineAt) {
+    await runBaseline(deps);
+  }
   for (const file of await candidates(deps, options.deep === true)) {
     result.checked++;
     const st = (deps.state.files[file.id] ||= { status: "pending", firstSeen: now.toISOString(), llmAttempts: 0 });

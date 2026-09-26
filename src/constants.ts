@@ -18,11 +18,13 @@ export const DEFAULT_SYNC_SECONDS = 300;
 /** Full Summary→Transcript reconcile window (matches the retired Grok routine). */
 export const SYNC_FULL_WINDOW_DAYS = 90;
 export const SYNC_FULL_EVERY_HOURS = 24;
-/** Give up waiting for Plaud to finish a summary/transcript after this long. */
-export const PENDING_GIVE_UP_HOURS = 48;
+/** Recordings waiting on Plaud are re-checked every poll for this long, then every 10 min. */
+export const PENDING_FAST_HOURS = 48;
+/** How far back deep scans and the cutover snapshot look for late summaries. */
+export const WATCH_DAYS = 30;
 /** Stop retrying the labeling call and write with Plaud's own title after this many failures. */
 export const LLM_MAX_ATTEMPTS = 6;
-export const STATE_KEEP_DAYS = 30;
+export const STATE_KEEP_DAYS = 45;
 
 export const DEFAULT_LLM_MODEL = "gpt-6-luna";
 export const DEFAULT_LLM_EFFORT = "high";

@@ -2,7 +2,10 @@ import { STATE_KEEP_DAYS } from "./constants.js";
 import { getProfileStatePath, readJson, writeJsonAtomic } from "./paths.js";
 
 export interface FileState {
-  status: "pending" | "done" | "gave_up";
+  /** baseline = finished before cutover (the Zap's); pending = waiting on Plaud or a retry. */
+  status: "pending" | "done" | "baseline";
+  /** Waiting longer than PENDING_FAST_HOURS: re-checked on deep scans only. */
+  slow?: boolean;
   firstSeen: string;
   name?: string;
   recorded?: string;
@@ -23,6 +26,8 @@ export interface ProfileState {
   files: Record<string, FileState>;
   lastSyncAt?: string;
   lastFullSyncAt?: string;
+  /** When the one-time cutover snapshot ran. */
+  baselineAt?: string;
 }
 
 export function emptyState(): ProfileState {
