@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { getProfile, loadConfig } from "./config.js";
-import { notionAccount, OPENAI_ACCOUNT, openaiAccount, PACKAGE_NAME, PACKAGE_VERSION, plaudAccount } from "./constants.js";
+import { ANTHROPIC_ACCOUNT, anthropicAccount, isAnthropicModel, notionAccount, OPENAI_ACCOUNT, openaiAccount, PACKAGE_NAME, PACKAGE_VERSION, plaudAccount } from "./constants.js";
 import { runDaemon } from "./daemon.js";
 import { runIngest } from "./ingest.js";
 import { createLogger } from "./log.js";
@@ -8,7 +8,7 @@ import { getConfigPath, getLogFilePath } from "./paths.js";
 import { runPlaudLogin } from "./plaud/login.js";
 import { createAuthSession } from "./plaud/session.js";
 import { safeErrorMessage } from "./redact.js";
-import { buildProfileRuntime, openaiKey, readStatus } from "./runtime.js";
+import { buildProfileRuntime, llmKey, readStatus } from "./runtime.js";
 import { createSecretStore, type SecretStore } from "./secrets.js";
 import { loadState, saveState } from "./state.js";
 import { scrubSsn } from "./scrub.js";
@@ -23,8 +23,9 @@ Usage:
   ${PACKAGE_NAME} login  --profile <p> [--no-browser]  Plaud sign-in for that profile's Plaud account
   ${PACKAGE_NAME} logout --profile <p>
   ${PACKAGE_NAME} set-secret notion --profile <p> [--from-keychain <service>/<account>]
+  ${PACKAGE_NAME} set-secret anthropic [--profile <p>] [--from-keychain <service>/<account>]
   ${PACKAGE_NAME} set-secret openai [--profile <p>] [--from-keychain <service>/<account>]
-  ${PACKAGE_NAME} doctor --profile <p>                 Check sign-ins, Notion schema, OpenAI key
+  ${PACKAGE_NAME} doctor --profile <p>                 Check sign-ins, Notion schema, LLM key for llmModel
   ${PACKAGE_NAME} status                               Last poll/sync/write per profile
   ${PACKAGE_NAME} scrub-ssn --profile <p> [--apply]    Find (dry run) or remove SSNs in existing rows
 
@@ -120,8 +121,13 @@ async function doctor(profileName: string, store: SecretStore): Promise<number> 
       line(false, `Plaud: ${safeErrorMessage(err)}`);
     }
     try {
-      await openaiKey(store, creds, process.env);
-      line(true, `OpenAI key present (model ${config.llmModel}, effort ${config.llmEffort})`);
+      await llmKey(store, creds, config.llmModel, process.env);
+      line(
+        true,
+        isAnthropicModel(config.llmModel)
+          ? `Anthropic key present (model ${config.llmModel})`
+          : `OpenAI key present (model ${config.llmModel}, effort ${config.llmEffort})`
+      );
     } catch (err) {
       line(false, safeErrorMessage(err));
     }
@@ -196,8 +202,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     case "set-secret": {
       const kind = argv[1];
       const profile = option(argv, "--profile");
-      if (kind !== "notion" && kind !== "openai") {
-        throw new Error("set-secret expects notion or openai");
+      if (kind !== "notion" && kind !== "openai" && kind !== "anthropic") {
+        throw new Error("set-secret expects notion, anthropic or openai");
       }
       if (kind === "notion" && !profile) {
         throw new Error("set-secret notion needs --profile <name>");
@@ -206,7 +212,16 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       if (!value) {
         throw new Error("Empty secret; nothing saved.");
       }
-      const account = kind === "notion" ? notionAccount(profile as string) : profile ? openaiAccount(profile) : OPENAI_ACCOUNT;
+      const account =
+        kind === "notion"
+          ? notionAccount(profile as string)
+          : kind === "anthropic"
+            ? profile
+              ? anthropicAccount(profile)
+              : ANTHROPIC_ACCOUNT
+            : profile
+              ? openaiAccount(profile)
+              : OPENAI_ACCOUNT;
       await store.set(account, value);
       console.log(`Saved ${kind} secret to ${store.describe()} account ${account}.`);
       return 0;

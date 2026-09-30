@@ -1,4 +1,4 @@
-import { LLM_TRANSCRIPT_CHARS } from "./constants.js";
+import { isAnthropicModel, LLM_TRANSCRIPT_CHARS } from "./constants.js";
 
 export interface RecordingLabels {
   participants: string[];
@@ -136,4 +136,89 @@ export class OpenAiLabeler implements Labeler {
         .join("");
     return parseLabels(text);
   }
+}
+
+/**
+ * Anthropic Messages API — Claude Haiku by default. Structured output via a
+ * forced `plaud_labels` tool call whose input schema is the same SCHEMA.
+ * (Forced tool_choice works on Haiku 4.5; newer Claude tiers reject it.)
+ */
+export class AnthropicLabeler implements Labeler {
+  constructor(
+    private readonly options: {
+      apiKey: string;
+      baseUrl: string;
+      model: string;
+      fetchImpl?: typeof fetch;
+      timeoutMs?: number;
+    }
+  ) {}
+
+  async label(input: LabelInput): Promise<RecordingLabels> {
+    let res: Response;
+    try {
+      res = await (this.options.fetchImpl || fetch)(`${this.options.baseUrl.replace(/\/$/, "")}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "x-api-key": this.options.apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: this.options.model,
+          max_tokens: 1024,
+          tools: [{ name: "plaud_labels", description: "Recording labels", input_schema: SCHEMA }],
+          tool_choice: { type: "tool", name: "plaud_labels" },
+          messages: [{ role: "user", content: buildLabelPrompt(input) }]
+        }),
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? 300_000)
+      });
+    } catch (err) {
+      throw new LlmError(`Anthropic request failed (${err instanceof Error ? err.name : "network"})`, true);
+    }
+    if (!res.ok) {
+      // 529 = overloaded; covered by >= 500.
+      const transient = res.status === 429 || res.status >= 500 || res.status === 408;
+      throw new LlmError(`Anthropic HTTP ${res.status}`, transient);
+    }
+    const json = (await res.json()) as { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+    const call = (json.content || []).find((c) => c.type === "tool_use" && c.name === "plaud_labels");
+    if (!call) {
+      throw new LlmError("Labeler returned no plaud_labels tool call", true);
+    }
+    return parseLabels(JSON.stringify(call.input ?? null));
+  }
+}
+
+/** Picks the provider from the model name: `claude-*` → Anthropic, anything else → OpenAI. */
+export function createLabeler(options: {
+  model: string;
+  effort: string;
+  openaiKey?: string;
+  anthropicKey?: string;
+  openaiBaseUrl: string;
+  anthropicBaseUrl: string;
+  fetchImpl?: typeof fetch;
+}): Labeler {
+  if (isAnthropicModel(options.model)) {
+    if (!options.anthropicKey) {
+      throw new LlmError(`No Anthropic API key for model ${options.model}`, false);
+    }
+    return new AnthropicLabeler({
+      apiKey: options.anthropicKey,
+      baseUrl: options.anthropicBaseUrl,
+      model: options.model,
+      fetchImpl: options.fetchImpl
+    });
+  }
+  if (!options.openaiKey) {
+    throw new LlmError(`No OpenAI API key for model ${options.model}`, false);
+  }
+  return new OpenAiLabeler({
+    apiKey: options.openaiKey,
+    baseUrl: options.openaiBaseUrl,
+    model: options.model,
+    effort: options.effort,
+    fetchImpl: options.fetchImpl
+  });
 }

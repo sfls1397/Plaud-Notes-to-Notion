@@ -1,7 +1,19 @@
 import { spawn } from "node:child_process";
 import type { AppConfig, ProfileConfig } from "./config.js";
-import { OPENAI_ACCOUNT, RELLOGIN_LLM, RELLOGIN_NOTION, notionAccount, openaiAccount, plaudAccount, relogin } from "./constants.js";
-import { OpenAiLabeler, type Labeler } from "./llm.js";
+import {
+  ANTHROPIC_ACCOUNT,
+  OPENAI_ACCOUNT,
+  RELLOGIN_ANTHROPIC,
+  RELLOGIN_LLM,
+  RELLOGIN_NOTION,
+  anthropicAccount,
+  isAnthropicModel,
+  notionAccount,
+  openaiAccount,
+  plaudAccount,
+  relogin
+} from "./constants.js";
+import { createLabeler, type Labeler } from "./llm.js";
 import { HttpNotionStore, type NotionStore } from "./notion.js";
 import { getStatusPath, readJson, writeJsonAtomic } from "./paths.js";
 import { HttpPlaudClient, type PlaudClient } from "./plaud/client.js";
@@ -27,6 +39,20 @@ export async function openaiKey(store: SecretStore, credentials: string, env: No
     throw new SetupError(RELLOGIN_LLM);
   }
   return key;
+}
+
+export async function anthropicKey(store: SecretStore, credentials: string, env: NodeJS.ProcessEnv): Promise<string> {
+  const key =
+    env.ANTHROPIC_API_KEY?.trim() || (await store.get(anthropicAccount(credentials))) || (await store.get(ANTHROPIC_ACCOUNT));
+  if (!key) {
+    throw new SetupError(RELLOGIN_ANTHROPIC);
+  }
+  return key;
+}
+
+/** The API key for the configured model's provider; SetupError naming the right `set-secret` if missing. */
+export async function llmKey(store: SecretStore, credentials: string, model: string, env: NodeJS.ProcessEnv): Promise<string> {
+  return isAnthropicModel(model) ? anthropicKey(store, credentials, env) : openaiKey(store, credentials, env);
 }
 
 export async function buildProfileRuntime(options: {
@@ -61,11 +87,15 @@ export async function buildProfileRuntime(options: {
 
   let labeler: Labeler = { label: () => Promise.reject(new SetupError("Labeler not needed for this command")) };
   if (options.needLabeler) {
-    labeler = new OpenAiLabeler({
-      apiKey: await openaiKey(options.store, creds, env),
-      baseUrl: options.config.openaiBaseUrl,
-      model: options.config.llmModel,
-      effort: options.config.llmEffort
+    const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
+    const key = await llmKey(options.store, creds, llmModel, env);
+    labeler = createLabeler({
+      model: llmModel,
+      effort: llmEffort,
+      openaiKey: isAnthropicModel(llmModel) ? undefined : key,
+      anthropicKey: isAnthropicModel(llmModel) ? key : undefined,
+      openaiBaseUrl,
+      anthropicBaseUrl
     });
   }
   return { plaud, notion, labeler };

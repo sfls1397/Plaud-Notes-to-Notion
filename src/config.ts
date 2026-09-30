@@ -1,4 +1,5 @@
 import {
+  DEFAULT_ANTHROPIC_BASE_URL,
   DEFAULT_LLM_EFFORT,
   DEFAULT_LLM_MODEL,
   DEFAULT_OPENAI_BASE_URL,
@@ -40,6 +41,7 @@ export interface AppConfig {
   llmModel: string;
   llmEffort: string;
   openaiBaseUrl: string;
+  anthropicBaseUrl: string;
   profiles: Record<string, ProfileConfig>;
 }
 
@@ -49,6 +51,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   llmModel: DEFAULT_LLM_MODEL,
   llmEffort: DEFAULT_LLM_EFFORT,
   openaiBaseUrl: DEFAULT_OPENAI_BASE_URL,
+  anthropicBaseUrl: DEFAULT_ANTHROPIC_BASE_URL,
   profiles: {}
 };
 
@@ -107,6 +110,10 @@ export function parseConfig(raw: unknown): AppConfig {
       typeof rec.openaiBaseUrl === "string" && rec.openaiBaseUrl.trim()
         ? rec.openaiBaseUrl.trim()
         : DEFAULT_CONFIG.openaiBaseUrl,
+    anthropicBaseUrl:
+      typeof rec.anthropicBaseUrl === "string" && rec.anthropicBaseUrl.trim()
+        ? rec.anthropicBaseUrl.trim()
+        : DEFAULT_CONFIG.anthropicBaseUrl,
     profiles
   };
 }
