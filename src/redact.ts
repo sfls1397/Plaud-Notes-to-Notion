@@ -1,5 +1,5 @@
 const SECRET_PATTERN =
-  /(PLAUD_API_TOKEN\s*[=:=]\s*)([^\s"',}]+)|(X-Amz-(?:Security-Token|Signature|Credential)=)([^\s&"']+)|(code=)([^\s&"']+)|(NOTION_TOKEN\s*[=:=]\s*)([^\s"',}]+)|(OPENAI_API_KEY\s*[=:=]\s*)([^\s"',}]+)|(Bearer\s+)([A-Za-z0-9._\-+=/]+)|(authorization["']?\s*[:=]\s*["']?)([^"'\s]+)|((?:access_token|refresh_token)\s*[=:]\s*["']?)([^"'\s,}]+)|(sk-[A-Za-z0-9_-]{16,})|(ntn_[A-Za-z0-9]+)|(secret_[A-Za-z0-9]+)/gi;
+  /(PLAUD_API_TOKEN\s*[=:=]\s*)([^\s"',}]+)|(X-Amz-(?:Security-Token|Signature|Credential)=)([^\s&"']+)|(code=)([^\s&"']+)|(NOTION_TOKEN\s*[=:=]\s*)([^\s"',}]+)|((?:OPENAI|ANTHROPIC)_API_KEY\s*[=:=]\s*)([^\s"',}]+)|(Bearer\s+)([A-Za-z0-9._\-+=/]+)|(authorization["']?\s*[:=]\s*["']?)([^"'\s]+)|((?:access_token|refresh_token)\s*[=:]\s*["']?)([^"'\s,}]+)|(sk-[A-Za-z0-9_-]{16,})|(ntn_[A-Za-z0-9]+)|(secret_[A-Za-z0-9]+)/gi;
 
 export function redactSecrets(text: string): string {
   if (!text) {

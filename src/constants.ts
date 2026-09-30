@@ -12,6 +12,9 @@ export const notionAccount = (profile: string): string => `notion:${profile}`;
 /** OpenAI API key. Shared unless a profile has its own `openai:<profile>`. */
 export const OPENAI_ACCOUNT = "openai";
 export const openaiAccount = (profile: string): string => `openai:${profile}`;
+/** Anthropic API key. Shared unless a profile has its own `anthropic:<profile>`. */
+export const ANTHROPIC_ACCOUNT = "anthropic";
+export const anthropicAccount = (profile: string): string => `anthropic:${profile}`;
 
 export const DEFAULT_POLL_SECONDS = 30;
 export const DEFAULT_SYNC_SECONDS = 300;
@@ -26,9 +29,14 @@ export const WATCH_DAYS = 30;
 export const LLM_MAX_ATTEMPTS = 6;
 export const STATE_KEEP_DAYS = 45;
 
-export const DEFAULT_LLM_MODEL = "gpt-6-luna";
+/** Claude Haiku by default; set `"llmModel": "gpt-6-luna"` in config.json to go back to OpenAI. */
+export const DEFAULT_LLM_MODEL = "claude-haiku-4-5";
+/** OpenAI reasoning effort (GPT-6 Luna). Ignored for Claude models. */
 export const DEFAULT_LLM_EFFORT = "high";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+/** `claude-*` models go to Anthropic's Messages API; everything else to OpenAI. */
+export const isAnthropicModel = (model: string): boolean => /^claude-/i.test(model.trim());
 /** Transcript characters sent to the labeler (names usually surface early). */
 export const LLM_TRANSCRIPT_CHARS = 24_000;
 
@@ -50,3 +58,7 @@ export const RELLOGIN_NOTION = (profile: string): string =>
   `Notion token missing or rejected for profile ${profile}. Run: plaud-notes-to-notion set-secret notion --profile ${profile}  (and share the Plaud Notes database with that integration).`;
 export const RELLOGIN_LLM =
   "OpenAI API key missing. Run: plaud-notes-to-notion set-secret openai  (or set OPENAI_API_KEY).";
+export const RELLOGIN_ANTHROPIC =
+  "Anthropic API key missing. Run: plaud-notes-to-notion set-secret anthropic  (or set ANTHROPIC_API_KEY).";
+/** The missing-key message for whichever provider serves `model`. */
+export const relloginLlmFor = (model: string): string => (isAnthropicModel(model) ? RELLOGIN_ANTHROPIC : RELLOGIN_LLM);

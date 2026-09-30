@@ -18,7 +18,7 @@ No Zapier, no extra runtime dependencies (Node ≥ 20 built-ins only).
 | **SSN redaction** (summary, transcript, title) | — (new) | Written *and* spoken digits, incl. answers in the next speaker's line. Runs before anything leaves the Mac. |
 | Remove `PLAUD NOTE`; pair quotes `“…”` | 3–4. Formatter Text | The Zap turned every `"` into `”`. |
 | Strip Plaud image embeds, `---`, blank lines; split `> **Label:** text` | 5. Code (JavaScript) | Ported verbatim. |
-| Title + Participants via **GPT-6 Luna, high effort**, strict JSON | 6. AI by Zapier | Also sees the transcript (names often only appear there) and the database's existing Participant spellings (e.g. `Casey - Bank`). Owner and `Speaker N` labels never listed. |
+| Participants via **Claude Haiku 4.5** (default) or **GPT-6 Luna, high effort**, schema-checked JSON | 6. AI by Zapier | Also sees the transcript (names often only appear there) and the database's existing Participant spellings (e.g. `Casey - Bank`). Owner and `Speaker N` labels never listed. |
 | Create **Summary** row (Notion markdown API) | 7. Notion | Block-for-block identical to the Zap's output. |
 | Create **Transcript** row (one plain-text paragraph) | 8. Notion | Exact text — `*`, `_`, `#` in speech can never turn into formatting. |
 | Summary → Transcript sync every **5 min** | Grok *Sync Plaud Transcripts to Summaries* (retired) | Pair by `Recorded` minute; skip ambiguous minutes; full 90-day reconcile daily. |
@@ -36,8 +36,7 @@ Plaud's own title; recordings still generating are re-checked every poll (up to
 {
   "pollSeconds": 30,
   "syncSeconds": 300,
-  "llmModel": "gpt-6-luna",
-  "llmEffort": "high",
+  "llmModel": "claude-haiku-4-5",
   "profiles": {
     "peter": { "enabled": true,  "owner": "Peter", "notionDataSourceId": "<Plaud Notes data source id>", "startAfter": "<cutover ISO time>" },
     "tim":   { "enabled": false, "owner": "Tim",   "notionDataSourceId": "<Tim's Plaud Notes data source id>", "startAfter": "<cutover ISO time>" }
@@ -50,20 +49,38 @@ Plaud's own title; recordings still generating are re-checked every poll (up to
 - `credentials` — use another profile's Keychain secrets (e.g. a test profile that writes to a test database with Peter's sign-in).
 - The daemon re-reads the file when it changes; turning a profile on needs no restart.
 
+### LLM (participant labeling)
+
+`llmModel` picks the provider: `claude-*` → Anthropic Messages API (key
+`anthropic`), anything else → OpenAI Responses API (key `openai`). Default is
+`claude-haiku-4-5`.
+
+| Want | `config.json` | Key needed |
+| --- | --- | --- |
+| Claude Haiku (default) | omit `llmModel`, or `"llmModel": "claude-haiku-4-5"` | `set-secret anthropic` |
+| Back to GPT-6 Luna | `"llmModel": "gpt-6-luna", "llmEffort": "high"` | `set-secret openai` |
+
+`llmEffort` only applies to OpenAI. The daemon picks up an `llmModel` change on
+its next loop (no restart). If the selected model's key is missing, that
+profile pauses (no ingest or sync) until the key is saved — run
+`doctor` first; it names the `set-secret` command.
+
 ## Setup (on the Mini, logged-in GUI session)
 
 ```bash
 npm install -g plaud-notes-to-notion        # or build from a checkout: npm ci && npm run build
 plaud-notes-to-notion login --profile peter # opens Plaud → sign in as that person → Authorize
 plaud-notes-to-notion set-secret notion --profile peter   # Notion internal integration secret (paste, hidden)
-plaud-notes-to-notion set-secret openai                   # OpenAI API key (shared by all profiles)
+plaud-notes-to-notion set-secret anthropic                # Anthropic API key (shared; Haiku, the default)
+plaud-notes-to-notion set-secret openai                   # OpenAI API key (shared; only if llmModel is gpt-*)
 plaud-notes-to-notion doctor --profile peter
 sh "$(npm root -g)/plaud-notes-to-notion/examples/install-launchagent.sh"
 ```
 
 The Notion integration needs **Read / Update / Insert** on that person's Plaud
 Notes database (••• → Connections). Secrets live only in Keychain service
-`plaud-notes-to-notion` (accounts `plaud:<profile>`, `notion:<profile>`, `openai`).
+`plaud-notes-to-notion` (accounts `plaud:<profile>`, `notion:<profile>`, `anthropic`, `openai`; a
+profile-specific `anthropic:<profile>` / `openai:<profile>` wins over the shared one).
 
 ## Everyday commands
 
