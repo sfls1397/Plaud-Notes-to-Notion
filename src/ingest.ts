@@ -10,6 +10,7 @@ import {
 import type { Labeler } from "./llm.js";
 import type { NotionRow, NotionStore, RowType } from "./notion.js";
 import type { PlaudClient, PlaudFileListing, PlaudRecording } from "./plaud/client.js";
+import { redactCardsAcross } from "./card.js";
 import { redactSsnAcross } from "./ssn.js";
 import type { FileState, ProfileState } from "./state.js";
 import { safeErrorMessage } from "./redact.js";
@@ -120,21 +121,25 @@ export interface PreparedRecording {
   transcriptText: string;
   plaudTitle: string;
   ssnRedactions: number;
+  cardRedactions: number;
 }
 
 /** Everything that happens to Plaud text before it leaves this Mac. */
 export function prepareRecording(rec: PlaudRecording): PreparedRecording {
-  const redacted = redactSsnAcross({
+  // Cards first: "last four of the card" belongs to the card, not the SSN.
+  const cards = redactCardsAcross({
     summary: rec.summaryMarkdown || "",
     transcript: formatTranscript(rec.segments),
     title: rec.name
   });
+  const redacted = redactSsnAcross(cards.texts);
   return {
     recorded: recordedMinute(rec.startAt as Date),
     summaryMarkdown: cleanSummaryMarkdown(redacted.texts.summary),
     transcriptText: redacted.texts.transcript,
     plaudTitle: redacted.texts.title,
-    ssnRedactions: redacted.count
+    ssnRedactions: redacted.count,
+    cardRedactions: cards.count
   };
 }
 
@@ -155,8 +160,12 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
   const prepared = prepareRecording(rec);
   st.recorded = prepared.recorded;
   st.ssnRedactions = prepared.ssnRedactions;
+  st.cardRedactions = prepared.cardRedactions;
   if (prepared.ssnRedactions > 0) {
     deps.log(`[${deps.profile}] redacted ${prepared.ssnRedactions} SSN mention(s) in "${prepared.plaudTitle}"`);
+  }
+  if (prepared.cardRedactions > 0) {
+    deps.log(`[${deps.profile}] redacted ${prepared.cardRedactions} card detail(s) in "${prepared.plaudTitle}"`);
   }
 
   if (!st.title) {
@@ -192,7 +201,7 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
   if (deps.dryRun) {
     deps.log(
       `[${deps.profile}] DRY RUN would write "${title}" Recorded ${prepared.recorded} Participants ${JSON.stringify(participants)} ` +
-        `(summary ${prepared.summaryMarkdown.length} chars, transcript ${prepared.transcriptText.length} chars, SSN redactions ${prepared.ssnRedactions})`
+        `(summary ${prepared.summaryMarkdown.length} chars, transcript ${prepared.transcriptText.length} chars, SSN redactions ${prepared.ssnRedactions}, card redactions ${prepared.cardRedactions})`
     );
     result.written.push({ id: file.id, title });
     return;

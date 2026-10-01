@@ -1,13 +1,14 @@
 import { NOTION_TEXT_CHUNK, NOTION_VERSION } from "./constants.js";
 import { redactSecrets } from "./redact.js";
+import { findCardDigits, redactCards } from "./card.js";
 import { findSsnDigits, redactDigits } from "./ssn.js";
 
 /**
- * One-off cleanup for rows written before redaction existed (the Zap era).
- * Scans a data source, pairs rows by Recorded minute (a value spoken in the
- * transcript is also removed from the summary), and rewrites only the affected
- * rich-text runs in place — block types, nesting and formatting are kept.
- * Dry run unless `apply` is true.
+ * One-off cleanup for rows written before a redaction existed (the Zap era for
+ * SSNs, before 2026-10-01 for cards). Scans a data source, pairs rows by
+ * Recorded minute (a value spoken in the transcript is also removed from the
+ * summary), and rewrites only the affected rich-text runs in place — block
+ * types, nesting and formatting are kept. Dry run unless `apply` is true.
  */
 type Json = Record<string, unknown>;
 
@@ -19,11 +20,26 @@ interface TextBlock {
 
 export interface ScrubResult {
   rowsScanned: number;
-  rowsAffected: Array<{ title: string; type: string; mentions: number }>;
+  rowsAffected: Array<{ title: string; type: string; ssn: number; card: number }>;
   blocksUpdated: number;
 }
 
-export async function scrubSsn(options: {
+/** Consecutive plain-text runs with identical formatting and link; other runs stand alone. */
+function sameFormatGroups(rich: TextBlock["rich"]): Array<TextBlock["rich"]> {
+  const key = (r: TextBlock["rich"][number]) => (r.type === "text" ? JSON.stringify([r.annotations, r.text?.link ?? null]) : undefined);
+  const groups: Array<TextBlock["rich"]> = [];
+  for (const r of rich) {
+    const last = groups[groups.length - 1];
+    if (last && key(r) !== undefined && key(r) === key(last[0])) {
+      last.push(r);
+    } else {
+      groups.push([r]);
+    }
+  }
+  return groups;
+}
+
+export async function scrubSensitive(options: {
   token: string;
   dataSourceId: string;
   apply: boolean;
@@ -82,33 +98,43 @@ export async function scrubSsn(options: {
   const result: ScrubResult = { rowsScanned: pages.length, rowsAffected: [], blocksUpdated: 0 };
   for (const rows of groups.values()) {
     const loaded = await Promise.all(rows.map(async (p) => ({ page: p, blocks: await blocksOf(String(p.id)) })));
-    const found = findSsnDigits(loaded.map((l) => l.blocks.map((b) => b.rich.map((r) => r.plain_text).join("")).join("\n")));
-    if (!found.size) {
-      continue;
-    }
+    const texts = loaded.map((l) => l.blocks.map((b) => b.rich.map((r) => r.plain_text).join("")).join("\n"));
+    const cardFound = findCardDigits(texts);
+    // SSN values are looked for after card details are gone, exactly like ingest.
+    const ssnFound = findSsnDigits(texts.map((t) => redactCards(t, cardFound).text));
     for (const { page, blocks } of loaded) {
-      let mentions = 0;
+      let ssn = 0;
+      let card = 0;
       for (const block of blocks) {
         let changed = false;
-        // The Zap wrote whole transcripts as one run of up to ~11k chars; the API only
-        // accepts ≤2000 per run on write, so rewritten runs are re-split (same formatting).
-        const rich = block.rich.flatMap((r): Json[] => {
-          const red = redactDigits(r.plain_text, found);
-          if (!red.count || r.type !== "text") {
-            return [r as unknown as Json];
+        // Adjacent runs with the same formatting are redacted as one string, so a
+        // trigger and its number split across runs are still caught. The Zap wrote
+        // whole transcripts as one run of up to ~11k chars; the API only accepts
+        // ≤2000 per run on write, so rewritten runs are re-split (same formatting).
+        const rich: Json[] = [];
+        for (const group of sameFormatGroups(block.rich)) {
+          if (group[0].type !== "text") {
+            rich.push(...(group as unknown as Json[]));
+            continue;
           }
-          mentions += red.count;
+          const plain = group.map((r) => r.plain_text).join("");
+          const c = redactCards(plain, cardFound);
+          const n = redactDigits(c.text, ssnFound);
+          if (!c.count && !n.count) {
+            rich.push(...(group as unknown as Json[]));
+            continue;
+          }
+          card += c.count;
+          ssn += n.count;
           changed = true;
-          const pieces: Json[] = [];
-          for (let i = 0; i < red.text.length; i += NOTION_TEXT_CHUNK) {
-            pieces.push({
+          for (let i = 0; i < n.text.length; i += NOTION_TEXT_CHUNK) {
+            rich.push({
               type: "text",
-              text: { content: red.text.slice(i, i + NOTION_TEXT_CHUNK), link: r.text?.link ?? null },
-              annotations: r.annotations
+              text: { content: n.text.slice(i, i + NOTION_TEXT_CHUNK), link: group[0].text?.link ?? null },
+              annotations: group[0].annotations
             });
           }
-          return pieces;
-        });
+        }
         if (changed) {
           result.blocksUpdated++;
           if (options.apply) {
@@ -116,12 +142,12 @@ export async function scrubSsn(options: {
           }
         }
       }
-      if (mentions) {
+      if (ssn || card) {
         const props = page.properties as Record<string, Json>;
         const title = ((props.Meeting?.title || []) as Array<{ plain_text: string }>).map((t) => t.plain_text).join("");
         const type = ((props.Type?.multi_select || []) as Array<{ name: string }>).map((t) => t.name).join(",");
-        result.rowsAffected.push({ title, type, mentions });
-        options.log(`${options.apply ? "scrubbed" : "DRY RUN would scrub"} ${mentions} SSN mention(s) in ${type} "${title}"`);
+        result.rowsAffected.push({ title, type, ssn, card });
+        options.log(`${options.apply ? "scrubbed" : "DRY RUN would scrub"} ${ssn} SSN + ${card} card mention(s) in ${type} "${title}"`);
       }
     }
   }

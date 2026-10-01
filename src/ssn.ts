@@ -9,7 +9,7 @@
 
 export const SSN_REPLACEMENT = "[SSN redacted]";
 
-const DIGIT_WORDS: Record<string, string> = {
+export const DIGIT_WORDS: Record<string, string> = {
   zero: "0",
   oh: "0",
   one: "1",
@@ -34,7 +34,7 @@ const NUMBER_RUN = new RegExp(`(?<![\\w])${TOKEN}(?:${SEP}${TOKEN})*(?![\\w])`, 
  * need a following 4- or 9-digit number and skip year-shaped values.
  */
 const STRONG_TRIGGER = /\b(?:social[ -]security(?:[ -](?:number|no\.?|#))?|s\.?\s?s\.?\s?n\.?|last\s+(?:four|4)(?:\s+digits)?\s+of\s+(?:(?:my|your|his|her|the)\s+)?(?:social|ss|ssn))\b/gi;
-const WEAK_TRIGGER = /\b(?:social(?!\s+(?:media|work|worker|workers|club|event|events|network|networks|skills|life|anxiety|studies|circle|hour|security))|last\s+(?:four|4)(?:\s+digits)?)\b/gi;
+const WEAK_TRIGGER = /\b(?:social(?!\s+(?:media|work|worker|workers|club|event|events|network|networks|skills|life|anxiety|studies|circle|hour|security))|last\s+(?:four|4)(?![^.?!\n]{0,40}\bcard\b)(?:\s+digits)?)\b/gi;
 
 /** Lookahead window after a trigger, long enough to cross into the next utterance. */
 const WINDOW_CHARS = 320;
@@ -70,7 +70,7 @@ interface Run {
   digits: string;
 }
 
-function protectedRanges(text: string): Array<[number, number]> {
+export function protectedRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   PROTECTED.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -102,7 +102,7 @@ function numberRuns(text: string): Run[] {
   return runs;
 }
 
-function looksLikeYear(digits: string): boolean {
+export function looksLikeYear(digits: string): boolean {
   return digits.length === 4 && /^(?:19|20)\d\d$/.test(digits);
 }
 
@@ -113,7 +113,7 @@ const DATE_BEFORE = new RegExp(
   "i"
 );
 
-function isYearInDate(text: string, run: Run): boolean {
+export function isYearInDate(text: string, run: { start: number; digits: string }): boolean {
   return looksLikeYear(run.digits) && DATE_BEFORE.test(text.slice(Math.max(0, run.start - 40), run.start));
 }
 
