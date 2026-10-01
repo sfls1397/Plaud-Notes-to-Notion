@@ -13,9 +13,10 @@ No Zapier, no extra runtime dependencies (Node ≥ 20 built-ins only).
 
 | Step | Zap step it replaces | Notes |
 | --- | --- | --- |
-| Poll Plaud every **30 s** (deep 7-day scan every 10 min) | 1. Plaud *Transcript & Summary Ready* | Writes only once Plaud has **both** the auto summary and the transcript. Zapier took ~1–2 min. |
+| Poll Plaud every **30 s** (deep 30-day scan every 10 min) | 1. Plaud *Transcript & Summary Ready* | Writes only once Plaud has **both** the auto summary and the transcript. Zapier took ~1–2 min. |
 | `Recorded` = recording start, to the minute, true UTC | 2. Date/Time `+5 hours` | The Zap's +5h hid Plaud's Central-time-labelled-UTC bug and would be **1 h off after DST ends**. |
 | **SSN redaction** (summary, transcript, title) | — (new) | Written *and* spoken digits, incl. answers in the next speaker's line. Runs before anything leaves the Mac. |
+| **Card redaction** (summary, transcript, title) | — (new) | Credit/debit card numbers (full, or partial: "ending in", "begins with", "last four of the card", "the 4417 card"), security code (CVV/CVC) and expiration date. Written or spoken; runs before SSN redaction so a card's last four is never labelled an SSN. A full number or 4-digit partial found anywhere in a recording is removed everywhere in it. |
 | Remove `PLAUD NOTE`; pair quotes `“…”` | 3–4. Formatter Text | The Zap turned every `"` into `”`. |
 | Strip Plaud image embeds, `---`, blank lines; split `> **Label:** text` | 5. Code (JavaScript) | Ported verbatim. |
 | Participants via **Claude Haiku 4.5** (default) or **GPT-6 Luna, high effort**, schema-checked JSON | 6. AI by Zapier | Also sees the transcript (names often only appear there) and the database's existing Participant spellings (e.g. `Casey - Bank`). Owner and `Speaker N` labels never listed. |
@@ -98,4 +99,4 @@ npm ci
 npm test && npm run typecheck && npm run build
 ```
 
-Tests use made-up SSNs only. Never commit tokens, real transcripts or database ids.
+Tests use made-up SSNs and card numbers only. Never commit tokens, real transcripts or database ids.

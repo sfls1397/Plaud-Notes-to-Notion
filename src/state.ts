@@ -17,6 +17,7 @@ export interface FileState {
   summaryPageId?: string;
   transcriptPageId?: string;
   ssnRedactions?: number;
+  cardRedactions?: number;
   lastError?: string;
   doneAt?: string;
 }

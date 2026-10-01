@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LLM_MAX_ATTEMPTS } from "../src/constants.js";
 import { runIngest, type IngestDeps } from "../src/ingest.js";
 import { emptyState, type ProfileState } from "../src/state.js";
+import { CARD_NUMBER_REPLACEMENT } from "../src/card.js";
 import { SSN_REPLACEMENT } from "../src/ssn.js";
 import { FakeLabeler, FakeNotion, FakePlaud } from "./fakes.js";
 
@@ -89,6 +90,26 @@ describe("runIngest", () => {
     expect(everything).not.toMatch(/four four one seven/i);
     expect(d.notion.rows[1].body).toContain(`Speaker 1 00:00:05\n${SSN_REPLACEMENT}.`);
     expect(d.state.files.of_1.ssnRedactions).toBe(2);
+  });
+
+  it("redacts card numbers before the labeler or Notion ever see the text", async () => {
+    const d = deps();
+    d.plaud.add({
+      id: "of_1",
+      name: "09-30 Cash advance on Visa ending 1111",
+      summaryMarkdown: "## Background\n- The customer's full credit card number is 4111 1111 1111 1111.",
+      segments: [
+        { speaker: "Speaker 2", startMs: 1000, text: "Do you have your credit card number?" },
+        { speaker: "Speaker 1", startMs: 5000, text: "Yes, it is four one one one one one one one one one one one one one one one." }
+      ]
+    });
+    await runIngest(d);
+    const everything = JSON.stringify([d.labeler.calls, d.notion.rows]);
+    expect(everything).not.toContain("1111");
+    expect(everything).not.toMatch(/four one one one/i);
+    expect(d.notion.rows[1].body).toContain(`Speaker 1 00:00:05\nYes, it is ${CARD_NUMBER_REPLACEMENT}.`);
+    expect(d.state.files.of_1.cardRedactions).toBe(3);
+    expect(d.state.files.of_1.ssnRedactions).toBe(0);
   });
 
   it("finishes a half-written recording without duplicating the Summary", async () => {
