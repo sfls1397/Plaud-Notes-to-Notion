@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/cli.js",
   "bin": {
-    "plaud-notes-to-notion": "./bin/plaud-notes-to-notion.js"
+    "plaud-notes-to-notion": "bin/plaud-notes-to-notion.js"
   },
   "author": "Peter Coates",
   "license": "MIT",

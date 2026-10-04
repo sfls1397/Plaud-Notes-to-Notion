@@ -84,8 +84,12 @@ describe("npm pack", () => {
     expect(files.some((file) => file.startsWith("dist/") && file.endsWith(".js"))).toBe(true);
     expect(files.some((file) => file.startsWith("examples/"))).toBe(true);
 
-    const packedPkg = JSON.parse(fs.readFileSync(path.join(packedRoot, "package.json"), "utf8")) as { version: string };
+    const packedPkg = JSON.parse(fs.readFileSync(path.join(packedRoot, "package.json"), "utf8")) as {
+      version: string;
+      bin: Record<string, string>;
+    };
     expect(packedPkg.version).toBe("1.0.0");
+    expect(packedPkg.bin["plaud-notes-to-notion"]).toBe("bin/plaud-notes-to-notion.js");
 
     const machinePath = /(?:^|[\s"'`])(?:\/Users\/|\/home\/[^/\s]+\/|\\\\Users\\)|Macmini\.lan/i;
     for (const file of files) {
