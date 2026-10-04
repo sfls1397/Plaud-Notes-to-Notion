@@ -1,7 +1,7 @@
 /** Product constants. No secrets. */
 
 export const PACKAGE_NAME = "plaud-notes-to-notion";
-export const PACKAGE_VERSION = "0.0.0";
+export const PACKAGE_VERSION = "1.0.0";
 
 /** macOS Keychain service. One service, named accounts per profile. */
 export const KEYCHAIN_SERVICE = "plaud-notes-to-notion";
