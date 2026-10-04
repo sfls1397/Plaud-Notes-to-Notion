@@ -1,0 +1,20 @@
+# Defense in depth on top of package.json "files". Runtime secrets and
+# machine-local config must never ship, even if they land under dist/, bin/,
+# or examples/.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+secrets/
+**/secrets/
+.plaud-notes-to-notion/
+**/.plaud-notes-to-notion/
+config.json
+**/config.json
+*.log
+*.pem
+*.key
+*.tgz
+.DS_Store
+**/.DS_Store

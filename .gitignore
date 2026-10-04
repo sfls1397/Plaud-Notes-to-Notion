@@ -10,3 +10,8 @@ coverage/
 *.tsbuildinfo
 secrets/
 .plaud-notes-to-notion/
+# Accidental local copies (runtime config lives under ~/.plaud-notes-to-notion/)
+/config.json
+*.pem
+*.key
+*.tgz

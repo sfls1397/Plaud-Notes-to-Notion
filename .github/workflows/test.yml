@@ -1,5 +1,4 @@
-# Tests on Ubuntu. Does not publish.
-# npm publish on GitHub Release lives only in npm-publish.yml.
+# Tests on Ubuntu. Does not publish to npm.
 
 name: Test
 
