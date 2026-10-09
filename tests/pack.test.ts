@@ -23,15 +23,15 @@ function walkFiles(dir: string): string[] {
 }
 
 describe("package version", () => {
-  it("is 1.0.0 in package.json, the lockfile, and PACKAGE_VERSION", () => {
+  it("is 1.1.0 in package.json, the lockfile, and PACKAGE_VERSION", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as { version: string };
     const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8")) as {
       version: string;
       packages: { "": { version: string } };
     };
-    expect(pkg.version).toBe("1.0.0");
-    expect(lock.version).toBe("1.0.0");
-    expect(lock.packages[""].version).toBe("1.0.0");
+    expect(pkg.version).toBe("1.1.0");
+    expect(lock.version).toBe("1.1.0");
+    expect(lock.packages[""].version).toBe("1.1.0");
     expect(PACKAGE_VERSION).toBe(pkg.version);
   });
 });
@@ -85,7 +85,7 @@ describe("npm pack", () => {
     expect(files.some((file) => file.startsWith("examples/"))).toBe(true);
 
     const packedPkg = JSON.parse(fs.readFileSync(path.join(packedRoot, "package.json"), "utf8")) as { version: string };
-    expect(packedPkg.version).toBe("1.0.0");
+    expect(packedPkg.version).toBe("1.1.0");
 
     const machinePath = /(?:^|[\s"'`])(?:\/Users\/|\/home\/[^/\s]+\/|\\\\Users\\)|Macmini\.lan/i;
     for (const file of files) {

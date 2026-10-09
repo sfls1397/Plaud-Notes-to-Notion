@@ -141,7 +141,8 @@ export class OpenAiLabeler implements Labeler {
 /**
  * Anthropic Messages API — Claude Haiku by default. Structured output via a
  * forced `plaud_labels` tool call whose input schema is the same SCHEMA.
- * (Forced tool_choice works on Haiku 4.5; newer Claude tiers reject it.)
+ * (Forced tool_choice works on Haiku 4.5 and 5.5 — on 5.5 it skips thinking;
+ * Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 reject it with HTTP 400.)
  */
 export class AnthropicLabeler implements Labeler {
   constructor(
