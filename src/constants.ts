@@ -1,7 +1,7 @@
 /** Product constants. No secrets. */
 
 export const PACKAGE_NAME = "plaud-notes-to-notion";
-export const PACKAGE_VERSION = "1.0.0";
+export const PACKAGE_VERSION = "1.1.0";
 
 /** macOS Keychain service. One service, named accounts per profile. */
 export const KEYCHAIN_SERVICE = "plaud-notes-to-notion";
@@ -30,7 +30,7 @@ export const LLM_MAX_ATTEMPTS = 6;
 export const STATE_KEEP_DAYS = 45;
 
 /** Claude Haiku by default; set `"llmModel": "gpt-6-luna"` in config.json to go back to OpenAI. */
-export const DEFAULT_LLM_MODEL = "claude-haiku-4-5";
+export const DEFAULT_LLM_MODEL = "claude-haiku-5-5";
 /** OpenAI reasoning effort (GPT-6 Luna). Ignored for Claude models. */
 export const DEFAULT_LLM_EFFORT = "high";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
