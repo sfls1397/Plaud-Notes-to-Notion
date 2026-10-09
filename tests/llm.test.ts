@@ -40,12 +40,12 @@ describe("AnthropicLabeler", () => {
         })
       );
     }) as unknown as typeof fetch;
-    const labeler = new AnthropicLabeler({ apiKey: "k", baseUrl: "https://api.test/", model: "claude-haiku-4-5", fetchImpl });
+    const labeler = new AnthropicLabeler({ apiKey: "k", baseUrl: "https://api.test/", model: "claude-haiku-5-5", fetchImpl });
     const out = await labeler.label(INPUT);
     expect(url).toBe("https://api.test/v1/messages");
     expect(headers["x-api-key"]).toBe("k");
     expect(headers["anthropic-version"]).toBe("2023-06-01");
-    expect(body.model).toBe("claude-haiku-4-5");
+    expect(body.model).toBe("claude-haiku-5-5");
     expect(body.tool_choice).toEqual({ type: "tool", name: "plaud_labels" });
     expect((body.tools as Array<{ name: string; input_schema: { required: string[] } }>)[0]).toMatchObject({
       name: "plaud_labels",
@@ -62,7 +62,7 @@ describe("AnthropicLabeler", () => {
       [429, true]
     ] as const) {
       const fetchImpl = (async () => new Response("{}", { status })) as unknown as typeof fetch;
-      const labeler = new AnthropicLabeler({ apiKey: "k", baseUrl: "https://api.test", model: "claude-haiku-4-5", fetchImpl });
+      const labeler = new AnthropicLabeler({ apiKey: "k", baseUrl: "https://api.test", model: "claude-haiku-5-5", fetchImpl });
       const err = await labeler.label(INPUT).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(LlmError);
       expect((err as LlmError).transient).toBe(transient);
@@ -71,7 +71,7 @@ describe("AnthropicLabeler", () => {
 
   it("fails transiently when no tool call comes back", async () => {
     const fetchImpl = (async () => new Response(JSON.stringify({ content: [{ type: "text", text: "hi" }] }))) as unknown as typeof fetch;
-    const labeler = new AnthropicLabeler({ apiKey: "k", baseUrl: "https://api.test", model: "claude-haiku-4-5", fetchImpl });
+    const labeler = new AnthropicLabeler({ apiKey: "k", baseUrl: "https://api.test", model: "claude-haiku-5-5", fetchImpl });
     await expect(labeler.label(INPUT)).rejects.toMatchObject({ transient: true });
   });
 });
@@ -79,11 +79,11 @@ describe("AnthropicLabeler", () => {
 describe("createLabeler", () => {
   const base = { effort: "high", openaiBaseUrl: "https://o.test/v1", anthropicBaseUrl: "https://a.test" };
   it("routes claude-* to Anthropic and anything else to OpenAI", () => {
-    expect(createLabeler({ ...base, model: "claude-haiku-4-5", anthropicKey: "a" })).toBeInstanceOf(AnthropicLabeler);
+    expect(createLabeler({ ...base, model: "claude-haiku-5-5", anthropicKey: "a" })).toBeInstanceOf(AnthropicLabeler);
     expect(createLabeler({ ...base, model: "gpt-6-luna", openaiKey: "o" })).toBeInstanceOf(OpenAiLabeler);
   });
   it("fails loud when the model's provider key is missing", () => {
-    expect(() => createLabeler({ ...base, model: "claude-haiku-4-5", openaiKey: "o" })).toThrow(/Anthropic/);
+    expect(() => createLabeler({ ...base, model: "claude-haiku-5-5", openaiKey: "o" })).toThrow(/Anthropic/);
     expect(() => createLabeler({ ...base, model: "gpt-6-luna", anthropicKey: "a" })).toThrow(/OpenAI/);
   });
 });
@@ -91,7 +91,7 @@ describe("createLabeler", () => {
 describe("config LLM defaults", () => {
   it("defaults to Claude Haiku and keeps Luna one config field away", () => {
     const d = parseConfig({});
-    expect(d.llmModel).toBe("claude-haiku-4-5");
+    expect(d.llmModel).toBe("claude-haiku-5-5");
     expect(d.anthropicBaseUrl).toBe("https://api.anthropic.com");
     expect(d.openaiBaseUrl).toBe("https://api.openai.com/v1");
     expect(parseConfig({ llmModel: "gpt-6-luna" }).llmModel).toBe("gpt-6-luna");
@@ -118,8 +118,8 @@ describe("buildProfileRuntime labeler key", () => {
     return buildProfileRuntime({ name: "p", profile, config, store, env: {}, needPlaud: false, needLabeler: true });
   };
   it("names set-secret anthropic when Haiku is configured and the key is missing", async () => {
-    await expect(build("claude-haiku-4-5", { openai: "o" })).rejects.toThrow(/set-secret anthropic/);
-    await expect(build("claude-haiku-4-5", { anthropic: "a" })).resolves.toBeDefined();
+    await expect(build("claude-haiku-5-5", { openai: "o" })).rejects.toThrow(/set-secret anthropic/);
+    await expect(build("claude-haiku-5-5", { anthropic: "a" })).resolves.toBeDefined();
   });
   it("names set-secret openai when Luna is configured and the key is missing", async () => {
     await expect(build("gpt-6-luna", { anthropic: "a" })).rejects.toThrow(/set-secret openai/);
