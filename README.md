@@ -99,4 +99,21 @@ npm ci
 npm test && npm run typecheck && npm run build
 ```
 
-Tests use made-up SSNs and card numbers only. Never commit tokens, real transcripts or database ids.
+Tests use explicitly fictional people, calls and all-zero SSNs; payment-card numbers are standard synthetic test values. Never commit tokens, real transcripts or database ids.
+
+
+### Privacy gates
+
+Install Gitleaks 8.30.1 and enable the staged gate once per clone:
+
+```bash
+git config core.hooksPath .githooks
+gitleaks git --log-opts=--all --config .gitleaks.toml --redact=100 --no-banner .
+npm run build && npm run scan:package
+```
+
+Push and pull-request CI scans full fetched history and package contents.
+`prepublishOnly` rebuilds and scans the exact npm file list before publication.
+Use home-derived paths and local config for real owners and destinations.
+After a rewritten history, discard old clones and re-clone; merging old history
+can restore removed data.

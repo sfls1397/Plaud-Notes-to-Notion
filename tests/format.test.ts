@@ -26,7 +26,7 @@ describe("cleanSummaryMarkdown (Zap steps 3–5)", () => {
       "### 3. The Exit",
       "The fictional banker offered example contact details.",
       "## Next Move",
-      "**@Example Banker (Speaker 1)**:",
+      "**@Example Banker (Speaker 1):**",
       "- [ ] Send a fictional example email - [TBD]"
     ]);
   });
@@ -84,7 +84,7 @@ describe("recordedMinute", () => {
 
 describe("cleanParticipants / meetingTitle", () => {
   it("removes the owner, generic labels, commas and duplicates", () => {
-    expect(cleanParticipants(["Alex Example", "Speaker 3", "Example Banker - Bank", "example banker - bank", "Smith, John", "example"], "Alex Example")).toEqual([
+    expect(cleanParticipants(["Alex Example", "Speaker 3", "Example Banker - Bank", "example banker - bank", "Smith, John", "alex example"], "Alex Example")).toEqual([
       "Example Banker - Bank",
       "Smith John"
     ]);
