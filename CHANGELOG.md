@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Replace personal identities and call-like fixtures with clearly synthetic examples.
+- Add staged, full-history CI and pre-publish package privacy/secret scans.
+- Preserve home-derived configuration, Keychain accounts and existing runtime state.
+
+
 ## 1.1.0
 
 Participant labeling now defaults to Claude Haiku 5.5 (`claude-haiku-5-5`),

@@ -9,6 +9,6 @@ Alex Example said, "I will use the example service later, thanks," and ended the
 ### 3. The Exit
 The fictional banker offered example contact details.
 ## Next Move
-> **@Example Banker (Speaker 1)**:
+> **@Example Banker (Speaker 1):**
 - [ ] Send a fictional example email - [TBD]
 
