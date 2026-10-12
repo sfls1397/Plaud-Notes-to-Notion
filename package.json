@@ -1,7 +1,7 @@
 {
   "name": "plaud-notes-to-notion",
-  "version": "1.2.0",
-  "description": "Mac Mini LaunchAgent: new Plaud recordings \u2192 Plaud Notes Notion database (Summary + Transcript rows), plus Summary\u2192Transcript title/participant sync. Replaces the Zapier Plaud \u2192 Notion Zaps.",
+  "version": "1.2.1",
+  "description": "Mac Mini LaunchAgent: new Plaud recordings → Plaud Notes Notion database (Summary + Transcript rows), plus Summary→Transcript title/participant sync. Replaces the Zapier Plaud → Notion Zaps.",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {

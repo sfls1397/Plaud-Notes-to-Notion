@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- Request max effort for Claude participant labeling.
+- Allow Haiku to think before calling the labels tool, with an 8,192-token output limit.
+
 ## 1.2.0
 
 - Replace personal identities and call-like fixtures with clearly synthetic examples.
