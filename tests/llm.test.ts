@@ -23,7 +23,7 @@ describe("OpenAiLabeler", () => {
 });
 
 describe("AnthropicLabeler", () => {
-  it("requests max effort and allows thinking before the plaud_labels tool call", async () => {
+  it("requests high effort and allows thinking before the plaud_labels tool call", async () => {
     let url = "";
     let headers: Record<string, string> = {};
     let body: Record<string, unknown> = {};
@@ -47,7 +47,7 @@ describe("AnthropicLabeler", () => {
     expect(headers["x-api-key"]).toBe("k");
     expect(headers["anthropic-version"]).toBe("2023-06-01");
     expect(body.model).toBe("claude-haiku-5-5");
-    expect(body.output_config).toEqual({ effort: "max" });
+    expect(body.output_config).toEqual({ effort: "high" });
     expect(body.max_tokens).toBe(8192);
     expect(body.tool_choice).toEqual({ type: "auto" });
     expect((body.messages as Array<{ content: string }>)[0].content).toContain("calling the plaud_labels tool exactly once");

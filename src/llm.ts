@@ -56,7 +56,7 @@ participants: the people (or organizations/sources) actually speaking in or dire
    - Never include ${owner}, even if ${owner} is a named speaker or the recording misspells ${owner}'s name.
    - Do not include people who are only mentioned, discussed, or referenced in a story being recounted (family, coworkers, friends in an anecdote) unless they also speak.
    - Preserve customary spelling and titles.
-   - Known names already used in this archive: ${JSON.stringify(known)}. When a participant is clearly the same person, organization, or source as a known name, return the known name exactly as written. Otherwise return the name as it appears in the recording.
+   - Known names already used in this archive: ${JSON.stringify(known)}. When a participant is clearly the same person, organization, or source as a known name, return the known name exactly as written. Recognizable transcription errors or shortened company greetings still count as the same participant; reuse the archive spelling rather than creating a new variant. If multiple known people share a first name, do not guess which one it is. Otherwise return the name as it appears in the recording.
    - Use the transcript to identify who is speaking or present (greetings, direct address, introductions). Never return generic diarization labels such as "Speaker 1" or "Speaker 3"; if a speaker cannot be named, leave them out.
    - Prefer a known name over a new one: a person who represents an organization (for example a coordinator named Dana at Acme Health, when "Dana - Acme" is a known name) is returned as that known name, and the organization is then not listed separately.
    - If the recording is playback of media (a video, podcast, lecture recording, etc.) rather than a live conversation, return the matching known source name if one fits (for example "YouTube Video"), not the people speaking in the media. A single speaker delivering a talk, lesson, or monologue to an audience with no back-and-forth with ${owner} is media playback.
@@ -140,7 +140,7 @@ export class OpenAiLabeler implements Labeler {
 
 /**
  * Anthropic Messages API — Claude Haiku by default. Structured output via a
- * `plaud_labels` tool call whose input schema is the same SCHEMA. Max effort
+ * `plaud_labels` tool call whose input schema is the same SCHEMA. High effort
  * with automatic tool choice lets Haiku think before producing the labels.
  */
 export class AnthropicLabeler implements Labeler {
@@ -167,7 +167,7 @@ export class AnthropicLabeler implements Labeler {
         body: JSON.stringify({
           model: this.options.model,
           max_tokens: 8192,
-          output_config: { effort: "max" },
+          output_config: { effort: "high" },
           tools: [{ name: "plaud_labels", description: "Recording labels", input_schema: SCHEMA }],
           tool_choice: { type: "auto" },
           messages: [{ role: "user", content: `${buildLabelPrompt(input)}\n\nReturn the result by calling the plaud_labels tool exactly once.` }]
