@@ -61,7 +61,7 @@ Plaud's own title; recordings still generating are re-checked every poll (up to
 | Claude Haiku (default) | omit `llmModel`, or `"llmModel": "claude-haiku-5-5"` | `set-secret anthropic` |
 | Back to GPT-6 Luna | `"llmModel": "gpt-6-luna", "llmEffort": "high"` | `set-secret openai` |
 
-`llmEffort` only applies to OpenAI. Claude requests explicitly use max effort, automatic tool choice so Haiku can think before returning Participants, and an 8,192-token output limit for thinking plus the structured tool result. The daemon picks up an `llmModel` change on
+`llmEffort` only applies to OpenAI. Claude requests explicitly use high effort, automatic tool choice so Haiku can think before returning Participants, and an 8,192-token output limit for thinking plus the structured tool result. The daemon picks up an `llmModel` change on
 its next loop (no restart). If the selected model's key is missing, that
 profile pauses (no ingest or sync) until the key is saved — run
 `doctor` first; it names the `set-secret` command.

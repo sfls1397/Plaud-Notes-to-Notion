@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2
+
+- Use high effort for Claude participant labeling, retaining automatic tool choice and thinking headroom.
+
 ## 1.2.1
 
 - Request max effort for Claude participant labeling.
