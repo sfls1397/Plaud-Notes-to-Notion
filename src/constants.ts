@@ -1,7 +1,8 @@
+import { readFileSync } from "node:fs";
 /** Product constants. No secrets. */
 
 export const PACKAGE_NAME = "plaud-notes-to-notion";
-export const PACKAGE_VERSION = "1.2.2";
+export const PACKAGE_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
 
 /** macOS Keychain service. One service, named accounts per profile. */
 export const KEYCHAIN_SERVICE = "plaud-notes-to-notion";
