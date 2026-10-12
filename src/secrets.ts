@@ -19,7 +19,8 @@ function stripSecurityPassword(stdout: string): string {
 
 /** Quote for `security -i` so the secret is on stdin, not `ps` argv. */
 export function quoteSecurityArg(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+  if (!value || /[\r\n\0]/.test(value)) throw new Error(KEYCHAIN_WRITE_FAILED);
+  return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
 export async function defaultSecurityRun(
@@ -70,26 +71,15 @@ export async function writeKeychainPassword(options: {
   securityBin?: string;
   securityRunImpl?: SecurityRunImpl;
 }): Promise<void> {
-  if (options.value.includes("\n") || options.value.includes("\r")) {
-    throw new Error(KEYCHAIN_WRITE_FAILED);
-  }
   const securityBin = options.securityBin || "/usr/bin/security";
   const run = options.securityRunImpl || defaultSecurityRun;
-  const addLine = (update: boolean): string =>
-    `add-generic-password${update ? " -U" : ""} -s ${quoteSecurityArg(options.service)} -a ${quoteSecurityArg(options.account)} -w ${quoteSecurityArg(options.value)}\n`;
+  const line = `add-generic-password -U -s ${quoteSecurityArg(options.service)} -a ${quoteSecurityArg(options.account)} -w ${quoteSecurityArg(options.value)}\n`;
+  if (Buffer.byteLength(line, "utf8") >= 4095) throw new Error(KEYCHAIN_WRITE_FAILED);
   try {
-    await run(securityBin, ["-i"], addLine(true));
+    await run(securityBin, ["-i"], line);
   } catch {
-    try {
-      await run(securityBin, ["delete-generic-password", "-s", options.service, "-a", options.account]);
-    } catch {
-      /* nothing to replace */
-    }
-    try {
-      await run(securityBin, ["-i"], addLine(false));
-    } catch {
-      throw new Error(KEYCHAIN_WRITE_FAILED);
-    }
+    // Preserve the old credential on failure; never delete it to retry an unproven write.
+    throw new Error(KEYCHAIN_WRITE_FAILED);
   }
   let readBack: string;
   try {
