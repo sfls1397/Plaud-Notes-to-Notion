@@ -140,9 +140,8 @@ export class OpenAiLabeler implements Labeler {
 
 /**
  * Anthropic Messages API — Claude Haiku by default. Structured output via a
- * forced `plaud_labels` tool call whose input schema is the same SCHEMA.
- * (Forced tool_choice works on Haiku 4.5 and 5.5 — on 5.5 it skips thinking;
- * Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 reject it with HTTP 400.)
+ * `plaud_labels` tool call whose input schema is the same SCHEMA. Max effort
+ * with automatic tool choice lets Haiku think before producing the labels.
  */
 export class AnthropicLabeler implements Labeler {
   constructor(
@@ -167,10 +166,11 @@ export class AnthropicLabeler implements Labeler {
         },
         body: JSON.stringify({
           model: this.options.model,
-          max_tokens: 1024,
+          max_tokens: 8192,
+          output_config: { effort: "max" },
           tools: [{ name: "plaud_labels", description: "Recording labels", input_schema: SCHEMA }],
-          tool_choice: { type: "tool", name: "plaud_labels" },
-          messages: [{ role: "user", content: buildLabelPrompt(input) }]
+          tool_choice: { type: "auto" },
+          messages: [{ role: "user", content: `${buildLabelPrompt(input)}\n\nReturn the result by calling the plaud_labels tool exactly once.` }]
         }),
         signal: AbortSignal.timeout(this.options.timeoutMs ?? 300_000)
       });

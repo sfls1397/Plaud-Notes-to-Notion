@@ -23,7 +23,7 @@ describe("OpenAiLabeler", () => {
 });
 
 describe("AnthropicLabeler", () => {
-  it("forces the plaud_labels tool on the Messages API and returns its participants", async () => {
+  it("requests max effort and allows thinking before the plaud_labels tool call", async () => {
     let url = "";
     let headers: Record<string, string> = {};
     let body: Record<string, unknown> = {};
@@ -34,6 +34,7 @@ describe("AnthropicLabeler", () => {
       return new Response(
         JSON.stringify({
           content: [
+            { type: "thinking", thinking: "", signature: "sig" },
             { type: "text", text: "Labeling." },
             { type: "tool_use", id: "toolu_1", name: "plaud_labels", input: { participants: ["Sam", 3, "Dana - Acme"] } }
           ]
@@ -46,7 +47,10 @@ describe("AnthropicLabeler", () => {
     expect(headers["x-api-key"]).toBe("k");
     expect(headers["anthropic-version"]).toBe("2023-06-01");
     expect(body.model).toBe("claude-haiku-5-5");
-    expect(body.tool_choice).toEqual({ type: "tool", name: "plaud_labels" });
+    expect(body.output_config).toEqual({ effort: "max" });
+    expect(body.max_tokens).toBe(8192);
+    expect(body.tool_choice).toEqual({ type: "auto" });
+    expect((body.messages as Array<{ content: string }>)[0].content).toContain("calling the plaud_labels tool exactly once");
     expect((body.tools as Array<{ name: string; input_schema: { required: string[] } }>)[0]).toMatchObject({
       name: "plaud_labels",
       input_schema: { required: ["participants"] }
