@@ -1,7 +1,7 @@
 {
   "name": "plaud-notes-to-notion",
-  "version": "1.2.3",
-  "description": "Mac Mini LaunchAgent: new Plaud recordings → Plaud Notes Notion database (Summary + Transcript rows), plus Summary→Transcript title/participant sync. Replaces the Zapier Plaud → Notion Zaps.",
+  "version": "1.2.4",
+  "description": "macOS LaunchAgent that copies finished Plaud recordings into a Notion database as Summary and Transcript rows, with SSN and payment-card redaction, LLM participant labels, and Summary-to-Transcript title/participant sync.",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {

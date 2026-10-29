@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.4
+
+- Rewrite the README and package description for any Plaud + Notion user; document the Notion schema, `scrub`, `logout` and the remaining CLI flags.
+
 ## 1.2.2
 
 - Use high effort for Claude participant labeling, retaining automatic tool choice and thinking headroom.
