@@ -129,9 +129,14 @@ describe("runDeletionSync", () => {
       const state = emptyState();
       await runDeletionSync(base(notion, state));
       notion.gone.add(id);
-      const r = await runDeletionSync(base(notion, state));
+      const logs: string[] = [];
+      const r = await runDeletionSync({ ...base(notion, state), log: (m: string) => logs.push(m) });
       expect(r.trashed).toEqual([]);
       expect(notion.trashCalls).toEqual([]);
+      // Kept as gone (by id, never re-made) and reported once, not every cycle.
+      expect(state.pairs?.s1?.gone).toBeTruthy();
+      await runDeletionSync({ ...base(notion, state), log: (m: string) => logs.push(m) });
+      expect(logs.filter((l) => l.includes("no longer visible"))).toHaveLength(1);
     }
   });
 

@@ -14,6 +14,7 @@ import { redactCardsAcross } from "./card.js";
 import { redactSsnAcross } from "./ssn.js";
 import type { FileState, ProfileState } from "./state.js";
 import { safeErrorMessage } from "./redact.js";
+import { minuteKey, rememberPair } from "./sync.js";
 
 export interface IngestDeps {
   profile: string;
@@ -207,7 +208,9 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
     return;
   }
 
-  const existing = await deps.notion.rowsAtMinute(prepared.recorded);
+  // Page ids first. The Recorded-minute + title lookup only runs while an id is still missing
+  // (a retry after a crash between create and save), so a row is never written twice.
+  const existing = st.summaryPageId && st.transcriptPageId ? [] : await deps.notion.rowsAtMinute(prepared.recorded);
   if (!st.summaryPageId) {
     const found = alreadyWritten(existing, TYPE_SUMMARY, title);
     st.summaryPageId = found
@@ -230,6 +233,10 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
             prepared.transcriptText
           )
         ).id;
+  }
+  const minute = minuteKey(prepared.recorded);
+  if (minute) {
+    rememberPair(deps.state, st.summaryPageId as string, st.transcriptPageId as string, minute);
   }
   st.status = "done";
   st.doneAt = now.toISOString();
