@@ -77,6 +77,7 @@ return { id };
 }
 
 async rowsAtMinute(minuteIso: string): Promise<NotionRow[]> {
+this.lookups.push(`minute ${minuteIso}`);
 const t = Date.parse(minuteIso);
 return this.liveRows().filter((r) => r.recorded && Date.parse(r.recorded) >= t && Date.parse(r.recorded) < t + 60_000);
 }
@@ -103,6 +104,15 @@ return this.liveRows().filter((r) => r.types.includes("Summary") && r.lastEdited
 
 async rowsRecordedSince(sinceIso: string): Promise<NotionRow[]> {
 return this.liveRows().filter((r) => r.recorded && r.recorded >= sinceIso);
+}
+
+/** Every lookup the code made: "id <pageId>" or "minute <iso>". */
+lookups: string[] = [];
+
+async rowById(pageId: string): Promise<NotionRow | null> {
+this.lookups.push(`id ${pageId}`);
+const row = this.liveRows().find((r) => r.id === pageId);
+return row ? { ...row } : null;
 }
 
 async pageState(pageId: string): Promise<"live" | "trashed" | "unknown"> {

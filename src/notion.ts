@@ -39,6 +39,8 @@ export interface NotionStore {
   summariesEditedSince(sinceIso: string): Promise<NotionRow[]>;
   rowsRecordedSince(sinceIso: string): Promise<NotionRow[]>;
   updateRow(pageId: string, patch: { title?: string; participants?: string[] }): Promise<void>;
+  /** One row by page id; null when it is in the trash, archived, or answers 404. */
+  rowById(pageId: string): Promise<NotionRow | null>;
   /** Queries never return trashed pages, so deletions are confirmed page by page. */
   pageState(pageId: string): Promise<"live" | "trashed" | "unknown">;
   setTrashed(pageId: string, inTrash: boolean): Promise<void>;
@@ -296,6 +298,18 @@ export class HttpNotionStore implements NotionStore {
     return this.queryAll({ property: "Recorded", date: { on_or_after: sinceIso } }, [
       { property: "Recorded", direction: "descending" }
     ]);
+  }
+
+  async rowById(pageId: string): Promise<NotionRow | null> {
+    try {
+      const page = await this.api("GET", `/pages/${pageId}`);
+      return page.in_trash === true || page.archived === true ? null : rowFromPage(page);
+    } catch (err) {
+      if (err instanceof NotionError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   async pageState(pageId: string): Promise<"live" | "trashed" | "unknown"> {

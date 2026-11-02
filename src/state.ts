@@ -43,6 +43,11 @@ export interface PairState {
   trashedAt?: string;
   /** Which side(s) the service trashed, or "both" when both were trashed together. */
   trashed?: "summary" | "transcript" | "both";
+  /**
+   * When a page of the pair answered 404 (permanently deleted, or no access). The
+   * pair is kept, never re-made and never acted on, so it is reported only once.
+   */
+  gone?: string;
 }
 
 export function emptyState(): ProfileState {

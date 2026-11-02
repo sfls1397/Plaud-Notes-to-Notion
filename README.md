@@ -24,7 +24,7 @@ No runtime dependencies beyond Node.js 20 or later.
 | **Participants** via an LLM, schema-checked JSON | The model sees the summary, the start of the transcript (names often only appear there), and the database's existing Participant spellings, so a person is spelled the same way every time. The profile owner and `Speaker N` labels are never listed. |
 | Create the **Summary** row | Page body is the cleaned summary, written with Notion's markdown API. The title is Plaud's own title without its date. |
 | Create the **Transcript** row | The full transcript as plain text, so `*`, `_` or `#` in speech never turn into formatting. |
-| Summary → Transcript sync every **5 min** | Pairs rows by `Recorded` minute and skips ambiguous minutes. A full 90-day reconcile runs once a day. |
+| Summary → Transcript sync every **5 min** | Finds each Summary's Transcript by page id: the state keeps every pair (Summary page id → Transcript page id) from the moment the rows are written. Only a Summary with no pair yet (a row made by hand, or one from before 1.2.5) is matched by `Recorded` minute (exactly one Summary and one Transcript; ambiguous minutes are skipped), and that match is then kept by id. A full 90-day reconcile runs once a day. |
 
 Reliability: per-profile state (`~/.plaud-notes-to-notion/state/<profile>.json`)
 so a crash never duplicates or loses a row; the participant call is retried 6
