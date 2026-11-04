@@ -13,7 +13,8 @@ import {
   plaudAccount,
   relogin
 } from "./constants.js";
-import { createLabeler, type Labeler } from "./llm.js";
+import { createLabeler, solLabeler, type Labeler } from "./llm.js";
+import { serviceSelection, type ServiceSelection } from "./service-engine.js";
 import { HttpNotionStore, type NotionStore } from "./notion.js";
 import { getStatusPath, readJson, writeJsonAtomic } from "./paths.js";
 import { HttpPlaudClient, type PlaudClient } from "./plaud/client.js";
@@ -63,8 +64,10 @@ export async function buildProfileRuntime(options: {
   env?: NodeJS.ProcessEnv;
   needPlaud: boolean;
   needLabeler: boolean;
+  selection?: ServiceSelection;
 }): Promise<ProfileRuntime> {
   const env = options.env || process.env;
+  const selection = options.selection || serviceSelection(env);
   const creds = options.profile.credentials;
   const notionToken = await options.store.get(notionAccount(creds));
   if (!notionToken) {
@@ -87,16 +90,20 @@ export async function buildProfileRuntime(options: {
 
   let labeler: Labeler = { label: () => Promise.reject(new SetupError("Labeler not needed for this command")) };
   if (options.needLabeler) {
-    const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
-    const key = await llmKey(options.store, creds, llmModel, env);
-    labeler = createLabeler({
-      model: llmModel,
-      effort: llmEffort,
-      openaiKey: isAnthropicModel(llmModel) ? undefined : key,
-      anthropicKey: isAnthropicModel(llmModel) ? key : undefined,
-      openaiBaseUrl,
-      anthropicBaseUrl
-    });
+    if (selection.engine === "sol") {
+      labeler = solLabeler(env);
+    } else {
+      const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
+      const key = await llmKey(options.store, creds, llmModel, env);
+      labeler = createLabeler({
+        model: llmModel,
+        effort: llmEffort,
+        openaiKey: isAnthropicModel(llmModel) ? undefined : key,
+        anthropicKey: isAnthropicModel(llmModel) ? key : undefined,
+        openaiBaseUrl,
+        anthropicBaseUrl
+      });
+    }
   }
   return { plaud, notion, labeler };
 }

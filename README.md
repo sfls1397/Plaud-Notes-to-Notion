@@ -1,5 +1,9 @@
 # Plaud Notes to Notion
 
+## Manual service engine
+
+With the coordinated Toolbox adapter installed, `toolbox engine use sol` selects Codex `gpt-6.1-sol` on the managed ChatGPT subscription. `toolbox engine use claude` restores this application's configured provider/model (normally Claude Haiku), and `toolbox engine status` reports selection. The daemon snapshots policy between ingestion units, so running work is unchanged and no restart is required for later switches. Sol does not require an LLM API key and never falls back automatically. Malformed policy or failed subscription transport stops labeling rather than writing guessed participants. Install the adapter once using the normal safe daemon deployment procedure before switching.
+
 A small macOS background service (LaunchAgent) that copies finished
 [Plaud](https://www.plaud.ai/) recordings into a Notion database. For each
 recording it writes two rows, one `Summary` and one `Transcript`. Every 5

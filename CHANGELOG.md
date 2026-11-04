@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6
+
+- Add the explicit Toolbox service-engine policy and subscription-only Codex Sol labeler. Observe changes between daemon units without changing in-flight ingestion. Restore the configured provider when switched back; no automatic fallback.
+
 ## 1.2.5
 
 - Find Notion rows by page id. Each Summary↔Transcript pair is kept by both page ids from the moment the rows are written (and backfilled from existing state); the title sync, the trash sync and a re-run of a recording open the pages by id. The `Recorded` minute + title lookup is only the first-time fallback, and its match is kept by id.

@@ -1,0 +1,1 @@
+{"version":1,"policyVersion":1,"transportVersion":1,"services":["plaud"],"entrypoints":["dist/service-engine.js"]}

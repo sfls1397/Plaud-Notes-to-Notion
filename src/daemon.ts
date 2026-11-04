@@ -12,6 +12,7 @@ import { buildProfileRuntime, notifyMac, readStatus, SetupError, updateStatus, t
 import type { SecretStore } from "./secrets.js";
 import { loadState, pruneState, saveState } from "./state.js";
 import { runDeletionSync, runSync } from "./sync.js";
+import { serviceSelection } from "./service-engine.js";
 
 const DEEP_SCAN_EVERY_MS = 10 * 60_000;
 const ALERT_EVERY_MS = 6 * 3_600_000;
@@ -23,6 +24,7 @@ interface ProfileTimers {
   nextDeep: number;
   runtime?: ProfileRuntime;
   runtimeRetryAt: number;
+  selectionGeneration?: string;
 }
 
 function describe(err: unknown, credentials: string): { message: string; auth: boolean } {
@@ -110,8 +112,21 @@ export async function runDaemon(options: {
         continue;
       }
       const now = Date.now();
-      const t = timers.get(name) || { nextPoll: now, nextSync: now, nextDeep: now, runtimeRetryAt: 0 };
+      const t: ProfileTimers = timers.get(name) || { nextPoll: now, nextSync: now, nextDeep: now, runtimeRetryAt: 0 };
       timers.set(name, t);
+      let selection;
+      try {
+        selection = serviceSelection(env);
+      } catch (error) {
+        reportError(name, profile.credentials, error);
+        continue;
+      }
+      const selectionKey = `${selection.engine}:${selection.generation}`;
+      if (t.selectionGeneration !== selectionKey) {
+        t.runtime = undefined;
+        t.runtimeRetryAt = 0;
+        t.selectionGeneration = selectionKey;
+      }
       if (!t.runtime) {
         if (now < t.runtimeRetryAt) {
           continue;
@@ -124,7 +139,8 @@ export async function runDaemon(options: {
             store: options.store,
             env,
             needPlaud: profile.ingest,
-            needLabeler: profile.ingest
+            needLabeler: profile.ingest,
+            selection
           });
         } catch (err) {
           reportError(name, profile.credentials, err);
