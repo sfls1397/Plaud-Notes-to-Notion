@@ -260,6 +260,7 @@ export async function runIngest(deps: IngestDeps, options: { deep?: boolean } = 
       await processOne(deps, file, st, result);
     } catch (err) {
       st.lastError = safeErrorMessage(err);
+      if (st.status === "pending") result.pending++;
       result.errors.push(`${file.name}: ${st.lastError}`);
       deps.save();
       // Auth problems affect every file; stop the cycle and let the daemon alert.

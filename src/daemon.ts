@@ -23,6 +23,8 @@ interface ProfileTimers {
   nextSync: number;
   nextDeep: number;
   runtime?: ProfileRuntime;
+  syncRuntime?: ProfileRuntime;
+  syncRuntimeRetryAt?: number;
   runtimeRetryAt: number;
   selectionGeneration?: string;
 }
@@ -100,6 +102,8 @@ export async function runDaemon(options: {
         configMtime = mtime;
         for (const t of timers.values()) {
           t.runtime = undefined;
+          t.syncRuntime = undefined;
+          t.syncRuntimeRetryAt = 0;
         }
         log.info("Config changed; reloaded.");
       }
@@ -114,23 +118,29 @@ export async function runDaemon(options: {
       const now = Date.now();
       const t: ProfileTimers = timers.get(name) || { nextPoll: now, nextSync: now, nextDeep: now, runtimeRetryAt: 0 };
       timers.set(name, t);
+      let ingestReady = profile.ingest;
       let selection;
       try {
         selection = profile.ingest ? serviceSelection(env) : undefined;
       } catch (error) {
-        reportError(name, profile.credentials, error);
-        continue;
+        if (now >= t.nextPoll) {
+          reportError(name, profile.credentials, error);
+          t.nextPoll = now + config.pollSeconds * 1000;
+        }
+        ingestReady = false;
       }
       const selectionKey = selection ? `${selection.engine}:${selection.generation}` : "sync-only";
-      if (t.selectionGeneration !== selectionKey) {
+      if (ingestReady && t.selectionGeneration !== selectionKey) {
         t.runtime = undefined;
         t.runtimeRetryAt = 0;
         t.selectionGeneration = selectionKey;
       }
-      if (!t.runtime) {
+      if (ingestReady && !t.runtime) {
         if (now < t.runtimeRetryAt) {
-          continue;
+          ingestReady = false;
         }
+      }
+      if (ingestReady && !t.runtime) {
         try {
           t.runtime = await buildProfileRuntime({
             name,
@@ -145,7 +155,7 @@ export async function runDaemon(options: {
         } catch (err) {
           reportError(name, profile.credentials, err);
           t.runtimeRetryAt = now + RUNTIME_RETRY_MS;
-          continue;
+          ingestReady = false;
         }
       }
       const rt = t.runtime;
@@ -153,7 +163,7 @@ export async function runDaemon(options: {
       const save = () => saveState(name, state, env);
       const plog = (m: string) => log.info(m);
 
-      if (profile.ingest && now >= t.nextPoll) {
+      if (ingestReady && rt && now >= t.nextPoll) {
         const deep = now >= t.nextDeep;
         t.nextPoll = now + config.pollSeconds * 1000;
         if (deep) {
@@ -177,13 +187,16 @@ export async function runDaemon(options: {
           );
           pruneState(state, new Date());
           save();
-          const patch: Record<string, unknown> = { lastPollOkAt: new Date().toISOString(), pending: r.pending };
+          const patch: Record<string, unknown> = { pending: r.pending };
           if (r.written.length) {
             patch.lastWritten = { title: r.written.at(-1)?.title, at: new Date().toISOString() };
           }
           if (!r.errors.length) {
+            patch.lastPollOkAt = new Date().toISOString();
             patch.lastError = undefined;
           } else {
+            patch.lastError = r.errors.join("; ").slice(0, 1000);
+            patch.lastErrorAt = new Date().toISOString();
             for (const e of r.errors) {
               log.error(`[${name}] ${e}`);
             }
@@ -193,7 +206,6 @@ export async function runDaemon(options: {
           if (reportError(name, profile.credentials, err)) {
             t.runtime = undefined;
             t.runtimeRetryAt = Date.now() + RUNTIME_RETRY_MS;
-            continue;
           }
         }
       }
@@ -201,13 +213,18 @@ export async function runDaemon(options: {
       if (profile.syncTranscripts && now >= t.nextSync) {
         t.nextSync = now + config.syncSeconds * 1000;
         try {
-          await runSync({ profile: name, notion: rt.notion, state, save, log: plog });
-          await runDeletionSync({ profile: name, notion: rt.notion, state, save, log: plog });
+          if (!t.syncRuntime) {
+            if (now < (t.syncRuntimeRetryAt || 0)) continue;
+            t.syncRuntime = await buildProfileRuntime({ name, profile, config, store: options.store, env,
+              needPlaud: false, needLabeler: false, selection: undefined });
+          }
+          await runSync({ profile: name, notion: t.syncRuntime.notion, state, save, log: plog });
+          await runDeletionSync({ profile: name, notion: t.syncRuntime.notion, state, save, log: plog });
           updateStatus(name, { lastSyncOkAt: new Date().toISOString() }, env);
         } catch (err) {
           if (reportError(name, profile.credentials, err)) {
-            t.runtime = undefined;
-            t.runtimeRetryAt = Date.now() + RUNTIME_RETRY_MS;
+            t.syncRuntime = undefined;
+            t.syncRuntimeRetryAt = Date.now() + RUNTIME_RETRY_MS;
           }
         }
       }

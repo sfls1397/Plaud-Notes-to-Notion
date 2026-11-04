@@ -26,6 +26,26 @@ function fixture() {
 }
 const request = { service: "fixture", system: "safe", prompt: "synthetic input", schema: { type: "object" }, timeoutMs: 1000 };
 
+it("cleans the owned transport group even when its wrapper exits before a descendant", async () => {
+  const f = fixture();
+  const pidFile = path.join(f.root, "descendant.pid");
+  const childCode = 'process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(' + JSON.stringify(pidFile) + ',String(process.pid));setInterval(()=>{},1000);';
+  f.transport('import { spawn } from "node:child_process";spawn(process.execPath,["-e",' + JSON.stringify(childCode) + '],{stdio:"ignore"});setInterval(()=>{},1000);');
+  let descendant: number | undefined;
+  const alive = () => { try { process.kill(descendant!, 0); return true; } catch { return false; } };
+  try {
+    await expect(serviceModel({ ...request, timeoutMs: 1500 }, f.env)).rejects.toThrow("timed out");
+    expect(fs.existsSync(pidFile)).toBe(true);
+    descendant = Number(fs.readFileSync(pidFile, "utf8"));
+    const end = Date.now() + 5000;
+    while (alive() && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
+    expect(alive()).toBe(false);
+  } finally {
+    if (!descendant && fs.existsSync(pidFile)) descendant = Number(fs.readFileSync(pidFile, "utf8"));
+    if (descendant && alive()) process.kill(descendant, "SIGKILL");
+  }
+}, 15000);
+
 it("leaves recordings pending after repeated Sol failures and can recover on restoration", async () => {
   const f = fixture();
   for (const body of ["process.exit(2)", "process.exit(1)", `console.log(JSON.stringify({version:1,engine:"codex",model:"gpt-6.1-sol",text:'{"participants":[123]}'}))`]) {

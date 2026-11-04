@@ -93,6 +93,7 @@ export function serviceModel(request: ServiceRequest, env: NodeJS.ProcessEnv = p
     child.on("close", (code) => {
       clearTimeout(timer);
       clearTimeout(escalation);
+      kill("SIGKILL");
       if (failure) return reject(failure);
       if (code !== 0) return reject(new ServiceModelError(code === 2 ? "Codex subscription usage limit" : "Service model failed", code === 2));
       try {
