@@ -65,15 +65,10 @@ export async function runDaemon(options: {
     log.warn("Another plaud-notes-to-notion daemon holds the lock; exiting.");
     return 0;
   }
-  const stop = () => lock.release();
-  process.once("SIGTERM", () => {
-    stop();
-    process.exit(0);
-  });
-  process.once("SIGINT", () => {
-    stop();
-    process.exit(0);
-  });
+  let stopping = false;
+  const stop = () => { stopping = true; };
+  process.on("SIGTERM", stop);
+  process.on("SIGINT", stop);
 
   let config: AppConfig = loadConfig(env);
   let configMtime = fs.statSync(getConfigPath(env)).mtimeMs;
@@ -94,7 +89,7 @@ export async function runDaemon(options: {
     return auth;
   };
 
-  while (!options.signal?.aborted) {
+  while (!stopping && !options.signal?.aborted) {
     try {
       const mtime = fs.statSync(getConfigPath(env)).mtimeMs;
       if (mtime !== configMtime) {
@@ -112,6 +107,7 @@ export async function runDaemon(options: {
     }
 
     for (const [name, profile] of Object.entries(config.profiles)) {
+      if (stopping || options.signal?.aborted) break;
       if (!profile.enabled || (!profile.ingest && !profile.syncTranscripts)) {
         continue;
       }
@@ -210,7 +206,7 @@ export async function runDaemon(options: {
         }
       }
 
-      if (profile.syncTranscripts && now >= t.nextSync) {
+      if (!stopping && !options.signal?.aborted && profile.syncTranscripts && now >= t.nextSync) {
         t.nextSync = now + config.syncSeconds * 1000;
         try {
           if (!t.syncRuntime) {
@@ -231,6 +227,8 @@ export async function runDaemon(options: {
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  stop();
+  process.removeListener("SIGTERM", stop);
+  process.removeListener("SIGINT", stop);
+  lock.release();
   return 0;
 }

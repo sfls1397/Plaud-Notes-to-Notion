@@ -5,6 +5,7 @@ import path from "node:path";
 import { parseConfig, saveConfig } from "../src/config.js";
 import { MemorySecretStore } from "../src/secrets.js";
 import { serviceSelection } from "../src/service-engine.js";
+import { getLockFilePath } from "../src/paths.js";
 
 const mocks = vi.hoisted(() => ({ build: vi.fn(), ingest: vi.fn(), sync: vi.fn(), deletionSync: vi.fn() }));
 vi.mock("../src/runtime.js", async (original) => ({ ...await original<object>(), buildProfileRuntime: mocks.build }));
@@ -13,6 +14,40 @@ vi.mock("../src/sync.js", () => ({ runSync: mocks.sync, runDeletionSync: mocks.d
 import { runDaemon } from "../src/daemon.js";
 
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
+
+it.each(["SIGTERM", "SIGINT"] as const)("drains active ingestion before releasing the lock on %s", async signal => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "plaud-daemon-drain-"));
+  const env = { ...process.env, PLAUD_NOTES_HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: path.join(root, "engine.json") };
+  const controller = new AbortController();
+  const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+  let release!: () => void;
+  const active = new Promise<void>(resolve => { release = resolve; });
+  vi.useFakeTimers();
+  try {
+    saveConfig(parseConfig({ profiles: { fixture: { enabled: true, ingest: true, syncTranscripts: true,
+      owner: "Alex Example", notionDataSourceId: "0".repeat(32), startAfter: "2026-01-01T00:00:00Z" } } }), env);
+    mocks.build.mockResolvedValue({ notion: {}, plaud: {}, labeler: {} });
+    mocks.ingest.mockImplementation(async () => { await active; return { pending: 0, written: [], errors: [] }; });
+    const running = runDaemon({ store: new MemorySecretStore(), env, signal: controller.signal,
+      log: { info: () => {}, warn: () => {}, error: () => {} } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.ingest).toHaveBeenCalledOnce();
+    process.emit(signal);
+    process.emit(signal);
+    expect(exit).not.toHaveBeenCalled();
+    expect(fs.existsSync(getLockFilePath(env))).toBe(true);
+    release();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(await running).toBe(0);
+    expect(fs.existsSync(getLockFilePath(env))).toBe(false);
+    expect(mocks.sync).not.toHaveBeenCalled();
+  } finally {
+    controller.abort();
+    release();
+    exit.mockRestore();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 it("continues sync-only daemon profiles with an invalid model policy", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "plaud-daemon-sync-"));
