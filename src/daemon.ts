@@ -116,12 +116,12 @@ export async function runDaemon(options: {
       timers.set(name, t);
       let selection;
       try {
-        selection = serviceSelection(env);
+        selection = profile.ingest ? serviceSelection(env) : undefined;
       } catch (error) {
         reportError(name, profile.credentials, error);
         continue;
       }
-      const selectionKey = `${selection.engine}:${selection.generation}`;
+      const selectionKey = selection ? `${selection.engine}:${selection.generation}` : "sync-only";
       if (t.selectionGeneration !== selectionKey) {
         t.runtime = undefined;
         t.runtimeRetryAt = 0;

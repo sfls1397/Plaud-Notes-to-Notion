@@ -8,6 +8,9 @@ import { buildProfileRuntime } from "../src/runtime.js";
 import { parseConfig } from "../src/config.js";
 import { MemorySecretStore } from "../src/secrets.js";
 import { solLabeler } from "../src/llm.js";
+import { runIngest } from "../src/ingest.js";
+import { emptyState } from "../src/state.js";
+import { FakeNotion, FakePlaud } from "./fakes.js";
 
 const folders: string[] = [];
 afterEach(() => { for (const folder of folders.splice(0)) fs.rmSync(folder, { recursive: true, force: true }); });
@@ -22,6 +25,36 @@ function fixture() {
   return { root, policy, env, write, transport, shell };
 }
 const request = { service: "fixture", system: "safe", prompt: "synthetic input", schema: { type: "object" }, timeoutMs: 1000 };
+
+it("leaves recordings pending after repeated Sol failures and can recover on restoration", async () => {
+  const f = fixture();
+  for (const body of ["process.exit(2)", "process.exit(1)", `console.log(JSON.stringify({version:1,engine:"codex",model:"gpt-6.1-sol",text:'{"participants":[123]}'}))`]) {
+    f.transport(body);
+    const plaud = new FakePlaud();
+    plaud.add({ id: "synthetic" });
+    const notion = new FakeNotion();
+    const state = emptyState();
+    const deps = { profile: "fixture", owner: "Alex Example", startAfter: new Date("2026-09-26T00:00:00Z"),
+      plaud, notion, state, labeler: solLabeler(f.env), save: () => {}, log: () => {} };
+    for (let attempt = 0; attempt < 7; attempt++) await runIngest(deps);
+    expect(notion.rows).toHaveLength(0);
+    expect(state.files.synthetic.status).not.toBe("done");
+    expect(state.files.synthetic.labelSource).not.toBe("fallback");
+    await runIngest({ ...deps, labeler: { label: async () => ({ participants: ["Sam"] }) } });
+    expect(notion.rows).toHaveLength(2);
+    expect(state.files.synthetic.labelSource).toBe("llm");
+  }
+});
+
+it("does not read model policy for a non-labeler runtime", async () => {
+  const f = fixture();
+  fs.writeFileSync(f.policy, "{");
+  const store = new MemorySecretStore();
+  await store.set("notion:p", "fixture");
+  const config = parseConfig({ profiles: { p: { owner: "Alex Example", notionDataSourceId: "0".repeat(32), startAfter: "2026-01-01T00:00:00Z" } } });
+  await expect(buildProfileRuntime({ name: "p", profile: config.profiles.p, config, store, env: f.env,
+    needPlaud: false, needLabeler: false })).resolves.toHaveProperty("notion");
+});
 
 it("switches labeler on the next unit without API keys and retains an in-flight selection", async () => {
   const f = fixture();

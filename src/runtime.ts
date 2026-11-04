@@ -67,7 +67,6 @@ export async function buildProfileRuntime(options: {
   selection?: ServiceSelection;
 }): Promise<ProfileRuntime> {
   const env = options.env || process.env;
-  const selection = options.selection || serviceSelection(env);
   const creds = options.profile.credentials;
   const notionToken = await options.store.get(notionAccount(creds));
   if (!notionToken) {
@@ -90,6 +89,7 @@ export async function buildProfileRuntime(options: {
 
   let labeler: Labeler = { label: () => Promise.reject(new SetupError("Labeler not needed for this command")) };
   if (options.needLabeler) {
+    const selection = options.selection || serviceSelection(env);
     if (selection.engine === "sol") {
       labeler = solLabeler(env);
     } else {

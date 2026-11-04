@@ -184,6 +184,7 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
     } catch (err) {
       st.llmAttempts++;
       st.lastError = safeErrorMessage(err);
+      if (deps.labeler.allowFallback === false) throw err;
       if (st.llmAttempts < LLM_MAX_ATTEMPTS) {
         deps.log(`[${deps.profile}] participant labeling failed for "${prepared.plaudTitle}" (attempt ${st.llmAttempts}/${LLM_MAX_ATTEMPTS}): ${st.lastError}`);
         result.pending++;
