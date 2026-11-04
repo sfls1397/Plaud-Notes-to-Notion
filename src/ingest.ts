@@ -184,6 +184,7 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
     } catch (err) {
       st.llmAttempts++;
       st.lastError = safeErrorMessage(err);
+      if (deps.labeler.allowFallback === false) throw err;
       if (st.llmAttempts < LLM_MAX_ATTEMPTS) {
         deps.log(`[${deps.profile}] participant labeling failed for "${prepared.plaudTitle}" (attempt ${st.llmAttempts}/${LLM_MAX_ATTEMPTS}): ${st.lastError}`);
         result.pending++;
@@ -259,6 +260,7 @@ export async function runIngest(deps: IngestDeps, options: { deep?: boolean } = 
       await processOne(deps, file, st, result);
     } catch (err) {
       st.lastError = safeErrorMessage(err);
+      if (st.status === "pending") result.pending++;
       result.errors.push(`${file.name}: ${st.lastError}`);
       deps.save();
       // Auth problems affect every file; stop the cycle and let the daemon alert.

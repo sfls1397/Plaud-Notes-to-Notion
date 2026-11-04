@@ -12,6 +12,7 @@ import { buildProfileRuntime, notifyMac, readStatus, SetupError, updateStatus, t
 import type { SecretStore } from "./secrets.js";
 import { loadState, pruneState, saveState } from "./state.js";
 import { runDeletionSync, runSync } from "./sync.js";
+import { serviceSelection } from "./service-engine.js";
 
 const DEEP_SCAN_EVERY_MS = 10 * 60_000;
 const ALERT_EVERY_MS = 6 * 3_600_000;
@@ -22,7 +23,10 @@ interface ProfileTimers {
   nextSync: number;
   nextDeep: number;
   runtime?: ProfileRuntime;
+  syncRuntime?: ProfileRuntime;
+  syncRuntimeRetryAt?: number;
   runtimeRetryAt: number;
+  selectionGeneration?: string;
 }
 
 function describe(err: unknown, credentials: string): { message: string; auth: boolean } {
@@ -61,15 +65,10 @@ export async function runDaemon(options: {
     log.warn("Another plaud-notes-to-notion daemon holds the lock; exiting.");
     return 0;
   }
-  const stop = () => lock.release();
-  process.once("SIGTERM", () => {
-    stop();
-    process.exit(0);
-  });
-  process.once("SIGINT", () => {
-    stop();
-    process.exit(0);
-  });
+  let stopping = false;
+  const stop = () => { stopping = true; };
+  process.on("SIGTERM", stop);
+  process.on("SIGINT", stop);
 
   let config: AppConfig = loadConfig(env);
   let configMtime = fs.statSync(getConfigPath(env)).mtimeMs;
@@ -90,7 +89,7 @@ export async function runDaemon(options: {
     return auth;
   };
 
-  while (!options.signal?.aborted) {
+  while (!stopping && !options.signal?.aborted) {
     try {
       const mtime = fs.statSync(getConfigPath(env)).mtimeMs;
       if (mtime !== configMtime) {
@@ -98,6 +97,8 @@ export async function runDaemon(options: {
         configMtime = mtime;
         for (const t of timers.values()) {
           t.runtime = undefined;
+          t.syncRuntime = undefined;
+          t.syncRuntimeRetryAt = 0;
         }
         log.info("Config changed; reloaded.");
       }
@@ -106,16 +107,36 @@ export async function runDaemon(options: {
     }
 
     for (const [name, profile] of Object.entries(config.profiles)) {
+      if (stopping || options.signal?.aborted) break;
       if (!profile.enabled || (!profile.ingest && !profile.syncTranscripts)) {
         continue;
       }
       const now = Date.now();
-      const t = timers.get(name) || { nextPoll: now, nextSync: now, nextDeep: now, runtimeRetryAt: 0 };
+      const t: ProfileTimers = timers.get(name) || { nextPoll: now, nextSync: now, nextDeep: now, runtimeRetryAt: 0 };
       timers.set(name, t);
-      if (!t.runtime) {
-        if (now < t.runtimeRetryAt) {
-          continue;
+      let ingestReady = profile.ingest;
+      let selection;
+      try {
+        selection = profile.ingest ? serviceSelection(env) : undefined;
+      } catch (error) {
+        if (now >= t.nextPoll) {
+          reportError(name, profile.credentials, error);
+          t.nextPoll = now + config.pollSeconds * 1000;
         }
+        ingestReady = false;
+      }
+      const selectionKey = selection ? `${selection.engine}:${selection.generation}` : "sync-only";
+      if (ingestReady && t.selectionGeneration !== selectionKey) {
+        t.runtime = undefined;
+        t.runtimeRetryAt = 0;
+        t.selectionGeneration = selectionKey;
+      }
+      if (ingestReady && !t.runtime) {
+        if (now < t.runtimeRetryAt) {
+          ingestReady = false;
+        }
+      }
+      if (ingestReady && !t.runtime) {
         try {
           t.runtime = await buildProfileRuntime({
             name,
@@ -124,12 +145,13 @@ export async function runDaemon(options: {
             store: options.store,
             env,
             needPlaud: profile.ingest,
-            needLabeler: profile.ingest
+            needLabeler: profile.ingest,
+            selection
           });
         } catch (err) {
           reportError(name, profile.credentials, err);
           t.runtimeRetryAt = now + RUNTIME_RETRY_MS;
-          continue;
+          ingestReady = false;
         }
       }
       const rt = t.runtime;
@@ -137,7 +159,7 @@ export async function runDaemon(options: {
       const save = () => saveState(name, state, env);
       const plog = (m: string) => log.info(m);
 
-      if (profile.ingest && now >= t.nextPoll) {
+      if (ingestReady && rt && now >= t.nextPoll) {
         const deep = now >= t.nextDeep;
         t.nextPoll = now + config.pollSeconds * 1000;
         if (deep) {
@@ -161,13 +183,16 @@ export async function runDaemon(options: {
           );
           pruneState(state, new Date());
           save();
-          const patch: Record<string, unknown> = { lastPollOkAt: new Date().toISOString(), pending: r.pending };
+          const patch: Record<string, unknown> = { pending: r.pending };
           if (r.written.length) {
             patch.lastWritten = { title: r.written.at(-1)?.title, at: new Date().toISOString() };
           }
           if (!r.errors.length) {
+            patch.lastPollOkAt = new Date().toISOString();
             patch.lastError = undefined;
           } else {
+            patch.lastError = r.errors.join("; ").slice(0, 1000);
+            patch.lastErrorAt = new Date().toISOString();
             for (const e of r.errors) {
               log.error(`[${name}] ${e}`);
             }
@@ -177,27 +202,33 @@ export async function runDaemon(options: {
           if (reportError(name, profile.credentials, err)) {
             t.runtime = undefined;
             t.runtimeRetryAt = Date.now() + RUNTIME_RETRY_MS;
-            continue;
           }
         }
       }
 
-      if (profile.syncTranscripts && now >= t.nextSync) {
+      if (!stopping && !options.signal?.aborted && profile.syncTranscripts && now >= t.nextSync) {
         t.nextSync = now + config.syncSeconds * 1000;
         try {
-          await runSync({ profile: name, notion: rt.notion, state, save, log: plog });
-          await runDeletionSync({ profile: name, notion: rt.notion, state, save, log: plog });
+          if (!t.syncRuntime) {
+            if (now < (t.syncRuntimeRetryAt || 0)) continue;
+            t.syncRuntime = await buildProfileRuntime({ name, profile, config, store: options.store, env,
+              needPlaud: false, needLabeler: false, selection: undefined });
+          }
+          await runSync({ profile: name, notion: t.syncRuntime.notion, state, save, log: plog });
+          await runDeletionSync({ profile: name, notion: t.syncRuntime.notion, state, save, log: plog });
           updateStatus(name, { lastSyncOkAt: new Date().toISOString() }, env);
         } catch (err) {
           if (reportError(name, profile.credentials, err)) {
-            t.runtime = undefined;
-            t.runtimeRetryAt = Date.now() + RUNTIME_RETRY_MS;
+            t.syncRuntime = undefined;
+            t.syncRuntimeRetryAt = Date.now() + RUNTIME_RETRY_MS;
           }
         }
       }
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  stop();
+  process.removeListener("SIGTERM", stop);
+  process.removeListener("SIGINT", stop);
+  lock.release();
   return 0;
 }
