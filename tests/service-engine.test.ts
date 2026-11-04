@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
 import { serviceModel, serviceSelection } from "../src/service-engine.js";
 import { buildProfileRuntime } from "../src/runtime.js";
 import { parseConfig } from "../src/config.js";
 import { MemorySecretStore } from "../src/secrets.js";
+import { solLabeler } from "../src/llm.js";
 
 const folders: string[] = [];
 afterEach(() => { for (const folder of folders.splice(0)) fs.rmSync(folder, { recursive: true, force: true }); });
@@ -33,6 +35,27 @@ it("switches labeler on the next unit without API keys and retains an in-flight 
   f.write("claude");
   expect(await selected.labeler.label({ owner: "Alex Example", plaudTitle: "fixture", summaryMarkdown: "Sam speaks", transcriptText: "Sam: hello", knownParticipants: [] })).toEqual({ participants: ["Sam"] });
   await expect(buildProfileRuntime(options)).rejects.toThrow("set-secret anthropic");
+});
+
+it("refuses FIFO policy without blocking before descriptor validation", () => {
+  const f = fixture();
+  execFileSync("/usr/bin/mkfifo", [f.policy]);
+  const module = new URL("../dist/service-engine.js", import.meta.url).href;
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+    `import {serviceSelection} from ${JSON.stringify(module)};try{serviceSelection();process.exitCode=2;}catch{process.stdout.write("rejected");}`],
+  { env: f.env, encoding: "utf8", timeout: 1500 });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe("rejected");
+});
+
+it("rejects malformed Sol labels without coercing participants or keeping extra fields", async () => {
+  const f = fixture();
+  const labeler = solLabeler(f.env);
+  for (const value of [null, { participants: [1] }, { participants: ["Sam"], unexpected: true }]) {
+    f.transport(`console.log(JSON.stringify({version:1,engine:"codex",model:"gpt-6.1-sol",text:${JSON.stringify(JSON.stringify(value))}}));`);
+    await expect(labeler.label({ owner: "Alex Example", plaudTitle: "Fixture", summaryMarkdown: "Synthetic only", transcriptText: "", knownParticipants: [] })).rejects.toMatchObject({ transient: false });
+  }
 });
 
 describe("manual service engine policy", () => {

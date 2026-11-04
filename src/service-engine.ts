@@ -19,7 +19,7 @@ export function serviceSelection(env: NodeJS.ProcessEnv = process.env): ServiceS
   const file = env.TOOLBOX_SERVICE_ENGINE_FILE || path.join(os.homedir(), ".toolbox", "service-engine.json");
   let descriptor: number;
   try {
-    descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return Object.freeze({ engine: "claude", generation: "baseline" });
