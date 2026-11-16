@@ -19,7 +19,7 @@ import { HttpNotionStore, type NotionStore } from "./notion.js";
 import { getStatusPath, readJson, writeJsonAtomic } from "./paths.js";
 import { HttpPlaudClient, type PlaudClient } from "./plaud/client.js";
 import { createAuthSession } from "./plaud/session.js";
-import type { SecretStore } from "./secrets.js";
+import { readSecret, type SecretStore } from "./secrets.js";
 
 export class SetupError extends Error {
   constructor(message: string) {
@@ -35,7 +35,7 @@ export interface ProfileRuntime {
 }
 
 export async function openaiKey(store: SecretStore, credentials: string, env: NodeJS.ProcessEnv): Promise<string> {
-  const key = env.OPENAI_API_KEY?.trim() || (await store.get(openaiAccount(credentials))) || (await store.get(OPENAI_ACCOUNT));
+  const key = (await readSecret(store, openaiAccount(credentials), env)) || (await readSecret(store, OPENAI_ACCOUNT, env));
   if (!key) {
     throw new SetupError(RELLOGIN_LLM);
   }
@@ -44,7 +44,7 @@ export async function openaiKey(store: SecretStore, credentials: string, env: No
 
 export async function anthropicKey(store: SecretStore, credentials: string, env: NodeJS.ProcessEnv): Promise<string> {
   const key =
-    env.ANTHROPIC_API_KEY?.trim() || (await store.get(anthropicAccount(credentials))) || (await store.get(ANTHROPIC_ACCOUNT));
+    (await readSecret(store, anthropicAccount(credentials), env)) || (await readSecret(store, ANTHROPIC_ACCOUNT, env));
   if (!key) {
     throw new SetupError(RELLOGIN_ANTHROPIC);
   }
@@ -68,7 +68,7 @@ export async function buildProfileRuntime(options: {
 }): Promise<ProfileRuntime> {
   const env = options.env || process.env;
   const creds = options.profile.credentials;
-  const notionToken = await options.store.get(notionAccount(creds));
+  const notionToken = await readSecret(options.store, notionAccount(creds), env);
   if (!notionToken) {
     throw new SetupError(RELLOGIN_NOTION(creds));
   }

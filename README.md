@@ -91,8 +91,27 @@ tool choice so the model can think before returning Participants, and an
 8,192-token output limit. The daemon picks up an `llmModel` change on its next
 loop (no restart). If the selected model's key is missing, that profile pauses
 (no ingest or sync) until the key is saved; `doctor` names the `set-secret`
-command. `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the environment is used
-before the Keychain key.
+command.
+
+### Keys from the environment (for example `infisical-run`)
+
+Every key except the Plaud sign-in can come from an environment variable. A
+variable that is set and not blank is used; otherwise the Keychain item is read
+exactly as before, so an unchanged LaunchAgent behaves as it always has.
+
+| Keychain account | Environment variable |
+| --- | --- |
+| `notion:<profile>` | `NOTION_TOKEN_<PROFILE>` (e.g. `NOTION_TOKEN_ALEX`) |
+| `anthropic:<profile>` | `ANTHROPIC_API_KEY_<PROFILE>` |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai:<profile>` | `OPENAI_API_KEY_<PROFILE>` |
+| `openai` | `OPENAI_API_KEY` |
+
+`<PROFILE>` is the profile's `credentials` name in upper case, with anything
+other than letters and digits turned into `_`. The profile's own key is still
+tried before the shared one, each from its variable first and its Keychain item
+second. The Plaud sign-in (`plaud:<profile>`) is refreshed and written back by
+the daemon, so it always stays in the Keychain.
 
 ## Setup (macOS, logged-in GUI session)
 

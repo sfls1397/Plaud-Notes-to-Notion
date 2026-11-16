@@ -9,7 +9,7 @@ import { runPlaudLogin } from "./plaud/login.js";
 import { createAuthSession } from "./plaud/session.js";
 import { safeErrorMessage } from "./redact.js";
 import { buildProfileRuntime, llmKey, readStatus } from "./runtime.js";
-import { createSecretStore, type SecretStore } from "./secrets.js";
+import { createSecretStore, readSecret, type SecretStore } from "./secrets.js";
 import { loadState, saveState } from "./state.js";
 import { scrubSensitive } from "./scrub.js";
 import { runDeletionSync, runSync } from "./sync.js";
@@ -231,7 +231,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     case "scrub-ssn": {
       const name = requireProfile(argv);
       const profile = getProfile(loadConfig(), name);
-      const token = await store.get(notionAccount(profile.credentials));
+      const token = await readSecret(store, notionAccount(profile.credentials), process.env);
       if (!token) {
         throw new Error(`No Notion token for ${profile.credentials}`);
       }
