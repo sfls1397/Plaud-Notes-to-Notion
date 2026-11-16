@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.7
+
+- Read every Notion and LLM key from the environment first and the Keychain second: `NOTION_TOKEN_<PROFILE>`, `ANTHROPIC_API_KEY_<PROFILE>`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY_<PROFILE>` and `OPENAI_API_KEY`, so the daemon can run under `infisical-run`. A blank variable falls back to the Keychain. The profile's own LLM key now wins over the shared `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` variable, matching what the Keychain-only service already used. Plaud sign-ins stay in the Keychain. Log redaction covers the per-profile variable names.
+
 ## 1.2.6
 
 - Add the explicit Toolbox service-engine policy and subscription-only Codex Sol labeler. Observe changes between daemon units without changing in-flight ingestion. Restore the configured provider when switched back; no automatic fallback.

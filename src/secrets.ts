@@ -225,6 +225,40 @@ export class KeychainSecretStore implements SecretStore {
   }
 }
 
+/** Environment variable prefix for each Keychain account kind. Plaud sessions have none on purpose. */
+const ENV_PREFIX: Readonly<Record<string, string>> = {
+  notion: "NOTION_TOKEN",
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY"
+};
+
+/**
+ * The environment variable that can stand in for a Keychain account, or null when the
+ * account is Keychain only. `notion:peter` → NOTION_TOKEN_PETER, `anthropic` → ANTHROPIC_API_KEY,
+ * `anthropic:peter` → ANTHROPIC_API_KEY_PETER. `plaud:*` sessions are refreshed and written
+ * back by the service, so they always stay in the Keychain.
+ */
+export function secretEnvName(account: string): string | null {
+  const [kind, ...rest] = account.split(":");
+  const prefix = Object.prototype.hasOwnProperty.call(ENV_PREFIX, kind) ? ENV_PREFIX[kind] : undefined;
+  if (!prefix) return null;
+  if (rest.length === 0) return kind === "notion" ? null : prefix;
+  const profile = rest.join(":").toUpperCase().replace(/[^A-Z0-9]/g, "_");
+  return profile ? `${prefix}_${profile}` : null;
+}
+
+/**
+ * Environment first, store (Keychain) second: the variable wins when it is set and not
+ * blank, so a service started through infisical-run takes its injected value, and an
+ * unchanged LaunchAgent keeps reading the Keychain exactly as before.
+ */
+export async function readSecret(store: SecretStore, account: string, env: NodeJS.ProcessEnv): Promise<string | null> {
+  const name = secretEnvName(account);
+  const fromEnv = name ? env[name]?.trim() : undefined;
+  if (fromEnv) return fromEnv;
+  return store.get(account);
+}
+
 export function createSecretStore(options: {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
