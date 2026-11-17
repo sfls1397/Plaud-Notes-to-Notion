@@ -142,6 +142,28 @@ describe("manual service engine policy", () => {
 });
 
 describe("subscription transport", () => {
+  it("removes app credentials from the child without changing the supplied environment", async () => {
+    const transportFixture = fixture();
+    const credentials = Object.fromEntries([
+      "NOTION_TOKEN", "NOTION_TOKEN_TEAM", "NOTION_TOKEN_BACKUP", "notion_token_team",
+      "OPENAI_API_KEY", "OPENAI_API_KEY_TEAM", "OPENAI_API_KEY_BACKUP", "openai_api_key_team",
+      "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_TEAM", "ANTHROPIC_API_KEY_BACKUP", "anthropic_api_key_team",
+      `NOTION_TOKEN_${"A".repeat(256)}`
+    ].map(name => [name, "synthetic-app-credential"]));
+    const environment = Object.freeze({ ...transportFixture.env, ...credentials,
+      PRESERVED_SETTING: "synthetic-setting", OPENAI_MODEL: "synthetic-model", NOTION_PAGE_ID: "synthetic-page" });
+    const snapshot = { ...environment };
+    transportFixture.transport(`
+      const forbidden = Object.keys(process.env).some(name => /^(?:NOTION_TOKEN|(?:OPENAI|ANTHROPIC)_API_KEY)/i.test(name));
+      if (forbidden || process.env.PRESERVED_SETTING !== "synthetic-setting"
+          || process.env.OPENAI_MODEL !== "synthetic-model" || process.env.NOTION_PAGE_ID !== "synthetic-page"
+          || !process.env.TOOLBOX_SERVICE_MODEL_BIN || !process.env.PATH) process.exit(7);
+      console.log(JSON.stringify({version:1,engine:"codex",model:"gpt-6.1-sol",text:"credential isolation passed"}));
+    `);
+    expect(await serviceModel(request, environment)).toBe("credential isolation passed");
+    expect(environment).toEqual(snapshot);
+  });
+
   it("pins codex and Sol, and preserves one already-selected request", async () => {
     const f = fixture();
     f.shell(`test "$1" = codex || exit 3\ncat > '${f.root}/input'\nprintf '%s' '{"version":1,"engine":"codex","model":"gpt-6.1-sol","text":"{\\"ok\\":true}"}'`);
