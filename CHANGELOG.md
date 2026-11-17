@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.8
+
+- Avoid overlapping scans of malformed per-profile secret names while retaining redaction for long profile names.
+- Keep Notion and LLM API credentials out of the subscription service-model child's environment without changing the daemon's environment.
+
 ## 1.2.7
 
 - Read every Notion and LLM key from the environment first and the Keychain second: `NOTION_TOKEN_<PROFILE>`, `ANTHROPIC_API_KEY_<PROFILE>`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY_<PROFILE>` and `OPENAI_API_KEY`, so the daemon can run under `infisical-run`. A blank variable falls back to the Keychain. The profile's own LLM key now wins over the shared `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` variable, matching what the Keychain-only service already used. Plaud sign-ins stay in the Keychain. Log redaction covers the per-profile variable names.

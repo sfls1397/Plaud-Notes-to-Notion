@@ -60,7 +60,9 @@ export function serviceModel(request: ServiceRequest, env: NodeJS.ProcessEnv = p
   if (Buffer.byteLength(input) > bound) return Promise.reject(new ServiceModelError("Service request exceeded bound"));
   return new Promise((resolve, reject) => {
     const binary = env.TOOLBOX_SERVICE_MODEL_BIN || path.join(os.homedir(), ".local", "bin", "service-model");
-    const child = spawn(binary, ["codex"], { env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
+    const childEnv = Object.fromEntries(Object.entries(env).filter(([name]) =>
+      !/^(?:NOTION_TOKEN|(?:OPENAI|ANTHROPIC)_API_KEY)/i.test(name)));
+    const child = spawn(binary, ["codex"], { env: childEnv, detached: true, stdio: ["pipe", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
     let bytes = 0;
     let failure: ServiceModelError | undefined;
