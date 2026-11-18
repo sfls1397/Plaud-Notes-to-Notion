@@ -45,6 +45,20 @@ export function subscriptionEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Pr
   for (const name of SUBSCRIPTION_ENV_KEEP) {
     if (env[name] !== undefined) out[name] = env[name];
   }
+  // Claude Code finds its subscription sign-in in the login Keychain by USER; a LaunchAgent's
+  // environment may not carry it ("Not logged in"), so take it from the OS account.
+  if (!out.USER || !out.LOGNAME) {
+    let account = "";
+    try {
+      account = os.userInfo().username;
+    } catch {
+      // no account name available; Claude Code then reports "Not logged in"
+    }
+    if (account) {
+      out.USER ||= account;
+      out.LOGNAME ||= account;
+    }
+  }
   return out;
 }
 

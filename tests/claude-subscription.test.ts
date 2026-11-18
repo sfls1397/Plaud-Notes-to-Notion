@@ -58,7 +58,9 @@ describe("subscriptionEnv", () => {
       AWS_ACCESS_KEY_ID: "fixture",
       ANTHROPIC_API_KEY_PETER: "fixture"
     });
-    expect(env).toEqual({ HOME: "/h", PATH: "/bin" });
+    const account = os.userInfo().username;
+    expect(env).toEqual({ HOME: "/h", PATH: "/bin", USER: account, LOGNAME: account });
+    expect(subscriptionEnv({ USER: "fixture-user", LOGNAME: "fixture-user" })).toEqual({ USER: "fixture-user", LOGNAME: "fixture-user" });
   });
 });
 
