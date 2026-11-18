@@ -1,13 +1,10 @@
 import { spawn } from "node:child_process";
 import type { AppConfig, ProfileConfig } from "./config.js";
 import {
-  ANTHROPIC_ACCOUNT,
   OPENAI_ACCOUNT,
-  RELLOGIN_ANTHROPIC,
   RELLOGIN_LLM,
   RELLOGIN_NOTION,
-  anthropicAccount,
-  isAnthropicModel,
+  isClaudeModel,
   notionAccount,
   openaiAccount,
   plaudAccount,
@@ -42,18 +39,12 @@ export async function openaiKey(store: SecretStore, credentials: string, env: No
   return key;
 }
 
-export async function anthropicKey(store: SecretStore, credentials: string, env: NodeJS.ProcessEnv): Promise<string> {
-  const key =
-    (await readSecret(store, anthropicAccount(credentials), env)) || (await readSecret(store, ANTHROPIC_ACCOUNT, env));
-  if (!key) {
-    throw new SetupError(RELLOGIN_ANTHROPIC);
-  }
-  return key;
-}
-
-/** The API key for the configured model's provider; SetupError naming the right `set-secret` if missing. */
-export async function llmKey(store: SecretStore, credentials: string, model: string, env: NodeJS.ProcessEnv): Promise<string> {
-  return isAnthropicModel(model) ? anthropicKey(store, credentials, env) : openaiKey(store, credentials, env);
+/**
+ * The API key a non-Claude model needs (OpenAI). A Claude model runs on the Claude
+ * subscription and needs no key, so none is read for it: undefined.
+ */
+export async function llmKey(store: SecretStore, credentials: string, model: string, env: NodeJS.ProcessEnv): Promise<string | undefined> {
+  return isClaudeModel(model) ? undefined : openaiKey(store, credentials, env);
 }
 
 export async function buildProfileRuntime(options: {
@@ -93,15 +84,13 @@ export async function buildProfileRuntime(options: {
     if (selection.engine === "sol") {
       labeler = solLabeler(env);
     } else {
-      const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
-      const key = await llmKey(options.store, creds, llmModel, env);
+      const { llmModel, llmEffort, openaiBaseUrl } = options.config;
       labeler = createLabeler({
         model: llmModel,
         effort: llmEffort,
-        openaiKey: isAnthropicModel(llmModel) ? undefined : key,
-        anthropicKey: isAnthropicModel(llmModel) ? key : undefined,
+        openaiKey: await llmKey(options.store, creds, llmModel, env),
         openaiBaseUrl,
-        anthropicBaseUrl
+        env
       });
     }
   }

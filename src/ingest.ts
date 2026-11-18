@@ -7,7 +7,7 @@ import {
   meetingTitle,
   recordedMinute
 } from "./format.js";
-import type { Labeler } from "./llm.js";
+import { LlmError, type Labeler } from "./llm.js";
 import type { NotionRow, NotionStore, RowType } from "./notion.js";
 import type { PlaudClient, PlaudFileListing, PlaudRecording } from "./plaud/client.js";
 import { redactCardsAcross } from "./card.js";
@@ -182,8 +182,15 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
       st.participants = cleanParticipants(labels.participants, deps.owner);
       st.labelSource = "llm";
     } catch (err) {
-      st.llmAttempts++;
       st.lastError = safeErrorMessage(err);
+      if (err instanceof LlmError && err.usageLimit) {
+        // The Claude subscription is at its usage limit: the note waits for it, and the
+        // wait never counts toward the no-participants fallback.
+        deps.log(`[${deps.profile}] Claude subscription at its usage limit; "${prepared.plaudTitle}" waits for it`);
+        result.pending++;
+        return;
+      }
+      st.llmAttempts++;
       if (deps.labeler.allowFallback === false) throw err;
       if (st.llmAttempts < LLM_MAX_ATTEMPTS) {
         deps.log(`[${deps.profile}] participant labeling failed for "${prepared.plaudTitle}" (attempt ${st.llmAttempts}/${LLM_MAX_ATTEMPTS}): ${st.lastError}`);

@@ -87,7 +87,8 @@ it("switches labeler on the next unit without API keys and retains an in-flight 
   const selected = await buildProfileRuntime(options);
   f.write("claude");
   expect(await selected.labeler.label({ owner: "Alex Example", plaudTitle: "fixture", summaryMarkdown: "Sam speaks", transcriptText: "Sam: hello", knownParticipants: [] })).toEqual({ participants: ["Sam"] });
-  await expect(buildProfileRuntime(options)).rejects.toThrow("set-secret anthropic");
+  // Back on the claude policy, Haiku runs on the Claude subscription: no API key to read.
+  expect((await buildProfileRuntime(options)).labeler.constructor.name).toBe("ClaudeSubscriptionLabeler");
 });
 
 it("refuses FIFO policy without blocking before descriptor validation", () => {

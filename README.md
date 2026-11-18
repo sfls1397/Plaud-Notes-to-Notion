@@ -12,7 +12,8 @@ onto the matching **Transcript** row.
 
 Before anything leaves your Mac, Social Security numbers and payment-card
 details are removed from the summary, transcript, and title. Participant names
-are filled in by a language model (Anthropic Claude by default, or OpenAI).
+are filled in by a language model (Claude Haiku on the Claude subscription by
+default, or OpenAI).
 
 No runtime dependencies beyond Node.js 20 or later.
 
@@ -76,22 +77,30 @@ to one Notion database; profiles differ only in *who* and *where*:
 
 ### LLM (participant labeling)
 
-`llmModel` picks the provider: `claude-*` → Anthropic Messages API (key
-`anthropic`), anything else → OpenAI Responses API (key `openai`). Default is
-`claude-haiku-5-5`. `anthropicBaseUrl` and `openaiBaseUrl` override the API
-endpoints.
+`llmModel` picks the provider: `claude-*` → the Claude subscription through
+headless Claude Code (`~/.local/bin/claude -p`, signed in to the subscription;
+no API key), anything else → OpenAI Responses API (key `openai`). Default is
+`claude-haiku-5-5`; only Haiku runs on the Claude path. `openaiBaseUrl`
+overrides the OpenAI endpoint. An old `anthropicBaseUrl` in `config.json` is
+ignored: nothing calls the Anthropic API.
 
 | Want | `config.json` | Key needed |
 | --- | --- | --- |
-| Claude Haiku (default) | omit `llmModel`, or `"llmModel": "claude-haiku-5-5"` | `set-secret anthropic` |
+| Claude Haiku (default) | omit `llmModel`, or `"llmModel": "claude-haiku-5-5"` | none: Claude Code signed in to the Claude subscription |
 | OpenAI | e.g. `"llmModel": "gpt-6-luna", "llmEffort": "high"` | `set-secret openai` |
 
-`llmEffort` only applies to OpenAI. Claude requests use high effort, automatic
-tool choice so the model can think before returning Participants, and an
-8,192-token output limit. The daemon picks up an `llmModel` change on its next
-loop (no restart). If the selected model's key is missing, that profile pauses
-(no ingest or sync) until the key is saved; `doctor` names the `set-secret`
-command.
+`llmEffort` only applies to OpenAI. Claude runs at high effort with no tools,
+no MCP servers, no settings files and no saved session, and returns
+Participants as Claude Code structured output. Claude Code's child gets only
+`HOME`, `PATH`, `TMPDIR`, `LANG`, `LC_ALL`, `USER`, `LOGNAME` and `TZ`, so no
+Anthropic key or endpoint in the daemon's environment can reach it, and a reply
+is accepted only when Claude Code reports it ran on the subscription sign-in
+(`apiKeySource: "none"`) with a Haiku model. When the subscription is at its
+usage limit the recording waits for it, and the wait never counts toward the
+no-participants fallback. `CLAUDE_SUBSCRIPTION_BIN` overrides the Claude Code
+path. The daemon picks up an `llmModel` change on its next loop (no restart). If
+an OpenAI model's key is missing, that profile pauses (no ingest or sync) until
+the key is saved; `doctor` names the `set-secret` command.
 
 ### Keys from the environment (for example `infisical-run`)
 
@@ -102,8 +111,6 @@ exactly as before, so an unchanged LaunchAgent behaves as it always has.
 | Keychain account | Environment variable |
 | --- | --- |
 | `notion:<profile>` | `NOTION_TOKEN_<PROFILE>` (e.g. `NOTION_TOKEN_ALEX`) |
-| `anthropic:<profile>` | `ANTHROPIC_API_KEY_<PROFILE>` |
-| `anthropic` | `ANTHROPIC_API_KEY` |
 | `openai:<profile>` | `OPENAI_API_KEY_<PROFILE>` |
 | `openai` | `OPENAI_API_KEY` |
 
@@ -119,7 +126,6 @@ the daemon, so it always stays in the Keychain.
 npm install -g plaud-notes-to-notion        # or build from a checkout: npm ci && npm run build
 plaud-notes-to-notion login --profile alex   # opens Plaud → sign in → Authorize
 plaud-notes-to-notion set-secret notion --profile alex   # Notion internal integration secret (paste, hidden)
-plaud-notes-to-notion set-secret anthropic               # Anthropic API key (shared; the default model)
 plaud-notes-to-notion set-secret openai                  # OpenAI API key (shared; only if llmModel is not claude-*)
 plaud-notes-to-notion doctor --profile alex
 sh "$(npm root -g)/plaud-notes-to-notion/examples/install-launchagent.sh"
@@ -128,8 +134,9 @@ sh "$(npm root -g)/plaud-notes-to-notion/examples/install-launchagent.sh"
 The Notion integration needs **Read / Update / Insert** on the database
 (••• → Connections). On macOS, secrets live only in the Keychain service
 `plaud-notes-to-notion` (accounts `plaud:<profile>`, `notion:<profile>`,
-`anthropic`, `openai`; a profile-specific `anthropic:<profile>` /
-`openai:<profile>` wins over the shared one). `set-secret` reads the value from
+`openai`; a profile-specific `openai:<profile>` wins over the shared one). The
+default Claude Haiku needs no key: sign Claude Code in to the Claude
+subscription. Older `anthropic` items are never read; removing them is up to you. `set-secret` reads the value from
 hidden input, or copies an existing Keychain item with
 `--from-keychain <service>/<account>`. `login --no-browser` prints the sign-in
 link instead of opening it.

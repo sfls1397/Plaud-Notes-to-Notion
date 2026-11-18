@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.9
+
+- Claude Haiku participant labels run on the Claude subscription through headless Claude Code, never the Anthropic API: no Anthropic key is read, `set-secret anthropic` is refused, and Claude Code's child gets an allowlisted environment with `--setting-sources ""`. A reply is accepted only when Claude Code reports the subscription sign-in (`apiKeySource: "none"`) and a Haiku model. A subscription usage limit leaves the recording waiting without spending a labeling attempt.
+
 ## 1.2.8
 
 - Avoid overlapping scans of malformed per-profile secret names while retaining redaction for long profile names.
