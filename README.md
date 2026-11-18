@@ -80,8 +80,10 @@ to one Notion database; profiles differ only in *who* and *where*:
 headless Claude Code (`~/.local/bin/claude`, signed in with `claude /login`, or
 `CLAUDE_SUBSCRIPTION_BIN`), anything else → OpenAI Responses API (key `openai`).
 Default is `claude-haiku-5-5`. The Anthropic key (`anthropic`) is optional and
-used only while the subscription is at its usage limit: the same model on the
-Anthropic Messages API for 15 minutes, then the subscription again. With no key,
+used only while the subscription is at its plan usage limit: the same model on
+the Anthropic Messages API for 15 minutes, then the subscription again. A
+session or 5-hour limit waits for the subscription; a server throttle or a bare
+429 never moves to the API. With no key,
 a limited note waits for the subscription without spending a labeling attempt.
 `anthropicBaseUrl` and `openaiBaseUrl` override the API endpoints.
 

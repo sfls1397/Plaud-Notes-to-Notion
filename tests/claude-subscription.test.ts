@@ -111,14 +111,14 @@ describe("end to end through a fake Claude Code", () => {
     for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  function fakeClaude(reply: { apiKeySource?: string; participants?: string[]; limit?: boolean }): { bin: string; record: string } {
+  function fakeClaude(reply: { apiKeySource?: string; participants?: string[]; limit?: boolean | string }): { bin: string; record: string } {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plaud-fake-claude-"));
     dirs.push(dir);
     const record = path.join(dir, "record.json");
     const bin = path.join(dir, "claude");
     const init = { type: "system", subtype: "init", apiKeySource: reply.apiKeySource ?? "none", model: HAIKU };
     const result = reply.limit
-      ? { type: "result", is_error: true, result: "You've hit your weekly limit" }
+      ? { type: "result", is_error: true, result: typeof reply.limit === "string" ? reply.limit : "You've hit your weekly limit" }
       : { type: "result", is_error: false, result: "", structured_output: { participants: reply.participants ?? [] }, modelUsage: { [HAIKU]: {} } };
     fs.writeFileSync(
       bin,
@@ -209,6 +209,31 @@ process.stdin.on("end", () => {
     } finally {
       resetClaudeApiHold();
     }
+  });
+
+  it("a server throttle or bare 429 is a plain failure and a session limit only waits: neither falls back to the Claude API", async () => {
+    const api = apiStub();
+    for (const [words, expected] of [
+      ["API Error: 429 Server is temporarily limiting requests (not your usage limit)", { usageLimit: false, planLimit: false }],
+      ["API Error: 429 rate_limit_error too many requests", { usageLimit: false, planLimit: false }],
+      ["Session limit reached ∙ resets 3am", { usageLimit: true, planLimit: false }],
+      ["5-hour limit reached ∙ resets 3am", { usageLimit: true, planLimit: false }]
+    ] as const) {
+      const fake = fakeClaude({ limit: words });
+      const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com",
+        anthropicKey: "fixture-not-a-key", fetchImpl: api.fetchImpl, env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
+      await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", ...expected });
+    }
+    expect(api.seen).toEqual([]);
+  });
+
+  it("a non-limit subscription failure with a key present never falls back to the Claude API", async () => {
+    const fake = fakeClaude({ limit: "Not logged in · Please run /login" });
+    const api = apiStub();
+    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com",
+      anthropicKey: "fixture-not-a-key", fetchImpl: api.fetchImpl, env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
+    await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", usageLimit: false });
+    expect(api.seen).toEqual([]);
   });
 
   it("a refused subscription run is not a limit, so it never falls back to the Claude API", async () => {

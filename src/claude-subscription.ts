@@ -21,11 +21,24 @@ import path from "node:path";
 
 export const SUBSCRIPTION_ENV_KEEP = ["HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "TZ"] as const;
 const HAIKU = /^claude-haiku-\d[a-z0-9.-]*$/;
-const LIMIT = /usage[_ ]limit|rate[_ -]?limit|hit your .{0,40}limit|reached your .{0,40}limit|limit reached|\b\d+-hour limit\b|weekly limit|too many requests|\b429\b|out of (?:extra )?usage/i;
+/** Claude Code saying a throttle is not the plan's limit ("Server is temporarily limiting requests (not your usage limit)"). */
+const NOT_LIMIT = /not your usage limit|temporarily limiting requests/i;
+/**
+ * The plan's own usage limit, worded as Toolbox claude-side's USAGE_LIMIT (lib/claude_side.py): only this may move a
+ * call to the Claude API. A bare 429, "rate limit" or "too many requests" is a one-time failure, never a fallback
+ * (Peter: never fall back to the API on a one-time failure; 8:53 AM CT Nov 11 2026).
+ */
+const PLAN_LIMIT = /hit your (?:(?:weekly|opus|sonnet|fable|haiku|usage credit|monthly spend)\s+)?limit\b|reached your (?:weekly |monthly )?usage limit|weekly limit|usage[_ ]limit|out of (?:extra )?usage\b|out of usage credits/i;
+/** A short-window limit (5-hour, session): the call waits for it, but it never moves to the Claude API (as claude-side). */
+const WINDOW_LIMIT = /\b\d+-hour limit\b|\bsession limit\b/i;
 const OUTPUT_BOUND = 8 * 1024 * 1024;
 
 export class ClaudeSubscriptionError extends Error {
-  constructor(message: string, readonly usageLimit = false) {
+  /**
+   * usageLimit: the subscription is at a limit, so the work waits for it (no attempt spent).
+   * planLimit: that limit is the plan's own usage limit, the only one a caller may answer with the Claude API.
+   */
+  constructor(message: string, readonly usageLimit = false, readonly planLimit = false) {
     super(message);
     this.name = "ClaudeSubscriptionError";
   }
@@ -107,20 +120,34 @@ function eventsOf(stdout: string): Events {
   return found;
 }
 
+/** Classify Claude Code's own failure words: the plan's usage limit, a short-window limit, or neither. */
+export function limitOf(text: string): "plan" | "window" | null {
+  if (NOT_LIMIT.test(text)) return null;
+  if (PLAN_LIMIT.test(text)) return "plan";
+  if (WINDOW_LIMIT.test(text)) return "window";
+  return null;
+}
+
+function limitError(kind: "plan" | "window"): ClaudeSubscriptionError {
+  return kind === "plan"
+    ? new ClaudeSubscriptionError("Claude subscription usage limit", true, true)
+    : new ClaudeSubscriptionError("Claude subscription session limit", true, false);
+}
+
 /** The reply text (the structured JSON, encoded) from one finished `claude -p` run. Throws on anything else. */
 export function readReply(model: string, code: number | null, stdout: string, stderr: string): string {
   const { init, result } = eventsOf(stdout);
   if (result?.is_error) {
-    const message = `${String(result.result ?? "")}\n${String(result.api_error ?? "")}`;
-    if (result.api_error_status === 429 || LIMIT.test(message)) {
-      throw new ClaudeSubscriptionError("Claude subscription usage limit", true);
-    }
+    const kind = limitOf(`${String(result.result ?? "")}\n${String(result.api_error ?? "")}`);
+    if (kind) throw limitError(kind);
     throw new ClaudeSubscriptionError("Claude subscription call failed");
   }
   if (!result) {
-    if (LIMIT.test(`${stderr}\n${stdout.split("\n").filter((l) => !l.trim().startsWith("{")).join("\n")}`)) {
-      throw new ClaudeSubscriptionError("Claude subscription usage limit", true);
-    }
+    // Like claude-side: only stderr and the last plain-text stdout line are Claude Code's own words.
+    const plain = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+    const last = plain.length && !plain[plain.length - 1].startsWith("{") ? plain[plain.length - 1] : "";
+    const kind = code === 0 ? null : limitOf(`${stderr}\n${last}`);
+    if (kind) throw limitError(kind);
     throw new ClaudeSubscriptionError(`Claude subscription call failed (exit ${code ?? "signal"})`);
   }
   if (!init || init.apiKeySource !== "none") {

@@ -24,8 +24,10 @@ export class LlmError extends Error {
   constructor(
     message: string,
     readonly transient: boolean,
-    /** The Claude subscription is at its usage limit: wait for it, never count it as a failed attempt. */
-    readonly usageLimit = false
+    /** The Claude subscription is at a limit: wait for it, never count it as a failed attempt. */
+    readonly usageLimit = false,
+    /** That limit is the plan's own usage limit: the only one ClaudeLabeler answers with the Claude API. */
+    readonly planLimit = false
   ) {
     super(message);
     this.name = "LlmError";
@@ -197,7 +199,7 @@ export class ClaudeSubscriptionLabeler implements Labeler {
       if (error instanceof ClaudeSubscriptionError) {
         // A refused run (API key in use, wrong model) never gets better by retrying; a limit, exit or timeout can.
         const permanent = /reply refused|Only Claude Haiku/.test(error.message);
-        throw new LlmError(error.message, !permanent, error.usageLimit);
+        throw new LlmError(error.message, !permanent, error.usageLimit, error.planLimit);
       }
       throw error;
     }
@@ -294,7 +296,7 @@ export class ClaudeLabeler implements Labeler {
     try {
       return await this.subscription.label(input);
     } catch (error) {
-      if (!this.api || !(error instanceof LlmError) || !error.usageLimit) {
+      if (!this.api || !(error instanceof LlmError) || !error.planLimit) {
         throw error;
       }
       claudeApiUntil = this.now() + CLAUDE_API_HOLD_MS;
