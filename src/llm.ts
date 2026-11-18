@@ -1,5 +1,5 @@
 import { ClaudeSubscriptionError, claudeSubscription } from "./claude-subscription.js";
-import { isClaudeModel, LLM_TRANSCRIPT_CHARS } from "./constants.js";
+import { isAnthropicModel, LLM_TRANSCRIPT_CHARS } from "./constants.js";
 import { serviceModel, ServiceModelError } from "./service-engine.js";
 
 export interface RecordingLabels {
@@ -169,6 +169,7 @@ export class OpenAiLabeler implements Labeler {
  * Claude (Haiku by default) on the Claude subscription through headless Claude
  * Code, never an Anthropic API key (Peter, 11:08 PM CT Nov 17 2026). Same prompt
  * and JSON schema as before; Claude Code's own structured output returns it.
+ * ClaudeLabeler falls back to AnthropicLabeler only on the subscription's usage limit.
  */
 export class ClaudeSubscriptionLabeler implements Labeler {
   constructor(
@@ -204,17 +205,118 @@ export class ClaudeSubscriptionLabeler implements Labeler {
   }
 }
 
-/** Picks the provider from the model name: `claude-*` → the Claude subscription, anything else → OpenAI. */
+/**
+ * Anthropic Messages API — Claude Haiku by default. Structured output via a
+ * `plaud_labels` tool call whose input schema is the same SCHEMA. High effort
+ * with automatic tool choice lets Haiku think before producing the labels.
+ */
+export class AnthropicLabeler implements Labeler {
+  constructor(
+    private readonly options: {
+      apiKey: string;
+      baseUrl: string;
+      model: string;
+      fetchImpl?: typeof fetch;
+      timeoutMs?: number;
+    }
+  ) {}
+
+  async label(input: LabelInput): Promise<RecordingLabels> {
+    let res: Response;
+    try {
+      res = await (this.options.fetchImpl || fetch)(`${this.options.baseUrl.replace(/\/$/, "")}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "x-api-key": this.options.apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: this.options.model,
+          max_tokens: 8192,
+          output_config: { effort: "high" },
+          tools: [{ name: "plaud_labels", description: "Recording labels", input_schema: SCHEMA }],
+          tool_choice: { type: "auto" },
+          messages: [{ role: "user", content: `${buildLabelPrompt(input)}\n\nReturn the result by calling the plaud_labels tool exactly once.` }]
+        }),
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? 300_000)
+      });
+    } catch (err) {
+      throw new LlmError(`Anthropic request failed (${err instanceof Error ? err.name : "network"})`, true);
+    }
+    if (!res.ok) {
+      // 529 = overloaded; covered by >= 500.
+      const transient = res.status === 429 || res.status >= 500 || res.status === 408;
+      throw new LlmError(`Anthropic HTTP ${res.status}`, transient);
+    }
+    const json = (await res.json()) as { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+    const call = (json.content || []).find((c) => c.type === "tool_use" && c.name === "plaud_labels");
+    if (!call) {
+      throw new LlmError("Labeler returned no plaud_labels tool call", true);
+    }
+    return parseLabels(JSON.stringify(call.input ?? null));
+  }
+}
+
+/** After a subscription limit, labels go straight to the Claude API for this long, then the subscription is tried again (as Toolbox claude-side does). */
+export const CLAUDE_API_HOLD_MS = 15 * 60 * 1000;
+let claudeApiUntil = 0;
+
+/** Test hook: forget a fallback hold left by an earlier label in this process. */
+export function resetClaudeApiHold(): void {
+  claudeApiUntil = 0;
+}
+
+/**
+ * Claude subscription first; the Claude API (same model) only while the subscription is at its usage
+ * limit (Peter, 11:58 PM CT Nov 17 2026: services outside T3 fall back to the Claude API when the
+ * subscription is up, then go back to it). With no Anthropic key, the limit reaches ingest, which keeps
+ * the note pending without spending an attempt.
+ */
+export class ClaudeLabeler implements Labeler {
+  private readonly subscription: ClaudeSubscriptionLabeler;
+  private readonly api: AnthropicLabeler | null;
+  private readonly now: () => number;
+
+  constructor(options: { model: string; env?: NodeJS.ProcessEnv; apiKey?: string; apiBaseUrl: string; fetchImpl?: typeof fetch; now?: () => number; log?: (line: string) => void }) {
+    this.subscription = new ClaudeSubscriptionLabeler({ model: options.model, env: options.env });
+    this.api = options.apiKey ? new AnthropicLabeler({ apiKey: options.apiKey, baseUrl: options.apiBaseUrl, model: options.model, fetchImpl: options.fetchImpl }) : null;
+    this.now = options.now || Date.now;
+    this.log = options.log || ((line) => process.stderr.write(`${line}\n`));
+  }
+
+  private readonly log: (line: string) => void;
+
+  async label(input: LabelInput): Promise<RecordingLabels> {
+    if (this.api && this.now() < claudeApiUntil) {
+      return this.api.label(input);
+    }
+    try {
+      return await this.subscription.label(input);
+    } catch (error) {
+      if (!this.api || !(error instanceof LlmError) || !error.usageLimit) {
+        throw error;
+      }
+      claudeApiUntil = this.now() + CLAUDE_API_HOLD_MS;
+      this.log("Claude subscription is at its usage limit: Claude API (same model) for the next 15 minutes, then the subscription again.");
+      return this.api.label(input);
+    }
+  }
+}
+
+/** Picks the provider from the model name: `claude-*` → the Claude subscription (the Claude API only on its limit), anything else → OpenAI. */
 export function createLabeler(options: {
   model: string;
   effort: string;
   openaiKey?: string;
+  anthropicKey?: string;
   openaiBaseUrl: string;
+  anthropicBaseUrl: string;
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
 }): Labeler {
-  if (isClaudeModel(options.model)) {
-    return new ClaudeSubscriptionLabeler({ model: options.model, env: options.env });
+  if (isAnthropicModel(options.model)) {
+    return new ClaudeLabeler({ model: options.model, env: options.env, apiKey: options.anthropicKey, apiBaseUrl: options.anthropicBaseUrl, fetchImpl: options.fetchImpl });
   }
   if (!options.openaiKey) {
     throw new LlmError(`No OpenAI API key for model ${options.model}`, false);

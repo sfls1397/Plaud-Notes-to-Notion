@@ -1,8 +1,6 @@
-import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { getProfile, loadConfig } from "./config.js";
-import { claudeBinary } from "./claude-subscription.js";
-import { isClaudeModel, notionAccount, OPENAI_ACCOUNT, openaiAccount, PACKAGE_NAME, PACKAGE_VERSION, plaudAccount } from "./constants.js";
+import { ANTHROPIC_ACCOUNT, anthropicAccount, isAnthropicModel, notionAccount, OPENAI_ACCOUNT, openaiAccount, PACKAGE_NAME, PACKAGE_VERSION, plaudAccount } from "./constants.js";
 import { runDaemon } from "./daemon.js";
 import { runIngest } from "./ingest.js";
 import { createLogger } from "./log.js";
@@ -10,7 +8,7 @@ import { getConfigPath, getLogFilePath } from "./paths.js";
 import { runPlaudLogin } from "./plaud/login.js";
 import { createAuthSession } from "./plaud/session.js";
 import { safeErrorMessage } from "./redact.js";
-import { buildProfileRuntime, llmKey, readStatus } from "./runtime.js";
+import { anthropicFallbackKey, buildProfileRuntime, llmKey, readStatus, requireClaudeCode } from "./runtime.js";
 import { createSecretStore, readSecret, type SecretStore } from "./secrets.js";
 import { loadState, saveState } from "./state.js";
 import { scrubSensitive } from "./scrub.js";
@@ -25,8 +23,9 @@ Usage:
   ${PACKAGE_NAME} login  --profile <p> [--no-browser]  Plaud sign-in for that profile's Plaud account
   ${PACKAGE_NAME} logout --profile <p>
   ${PACKAGE_NAME} set-secret notion --profile <p> [--from-keychain <service>/<account>]
+  ${PACKAGE_NAME} set-secret anthropic [--profile <p>] [--from-keychain <service>/<account>]
   ${PACKAGE_NAME} set-secret openai [--profile <p>] [--from-keychain <service>/<account>]
-  ${PACKAGE_NAME} doctor --profile <p>                 Check sign-ins, Notion schema, and the model path for llmModel
+  ${PACKAGE_NAME} doctor --profile <p>                 Check sign-ins, Notion schema, LLM key for llmModel
   ${PACKAGE_NAME} status                               Last poll/sync/write per profile
   ${PACKAGE_NAME} scrub --profile <p> [--apply]        Find (dry run) or remove SSNs and card details in existing rows
 
@@ -121,12 +120,15 @@ async function doctor(profileName: string, store: SecretStore): Promise<number> 
     } catch (err) {
       line(false, `Plaud: ${safeErrorMessage(err)}`);
     }
-    if (isClaudeModel(config.llmModel)) {
-      // No API key: Claude runs on the Claude subscription through headless Claude Code.
-      const bin = claudeBinary(process.env);
-      line(fs.existsSync(bin), fs.existsSync(bin)
-        ? `Claude Code present for the Claude subscription (model ${config.llmModel}; no API key used)`
-        : `Claude Code not found at ${bin}; sign it in to the Claude subscription (model ${config.llmModel})`);
+    if (isAnthropicModel(config.llmModel)) {
+      try {
+        requireClaudeCode(process.env);
+        line(true, `Claude Code present for the Claude subscription (model ${config.llmModel})`);
+      } catch (err) {
+        line(false, safeErrorMessage(err));
+      }
+      const fallback = await anthropicFallbackKey(store, creds, process.env);
+      console.log(`  ${fallback ? "Anthropic key present: the Claude API fallback while the subscription is at its usage limit" : "No Anthropic key: on the subscription's usage limit notes wait for it"}`);
     } else {
       try {
         await llmKey(store, creds, config.llmModel, process.env);
@@ -206,11 +208,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     case "set-secret": {
       const kind = argv[1];
       const profile = option(argv, "--profile");
-      if (kind === "anthropic") {
-        throw new Error("Claude models run on the Claude subscription now; no Anthropic API key is stored or used.");
-      }
-      if (kind !== "notion" && kind !== "openai") {
-        throw new Error("set-secret expects notion or openai");
+      if (kind !== "notion" && kind !== "openai" && kind !== "anthropic") {
+        throw new Error("set-secret expects notion, anthropic or openai");
       }
       if (kind === "notion" && !profile) {
         throw new Error("set-secret notion needs --profile <name>");
@@ -220,7 +219,15 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         throw new Error("Empty secret; nothing saved.");
       }
       const account =
-        kind === "notion" ? notionAccount(profile as string) : profile ? openaiAccount(profile) : OPENAI_ACCOUNT;
+        kind === "notion"
+          ? notionAccount(profile as string)
+          : kind === "anthropic"
+            ? profile
+              ? anthropicAccount(profile)
+              : ANTHROPIC_ACCOUNT
+            : profile
+              ? openaiAccount(profile)
+              : OPENAI_ACCOUNT;
       await store.set(account, value);
       console.log(`Saved ${kind} secret to ${store.describe()} account ${account}.`);
       return 0;

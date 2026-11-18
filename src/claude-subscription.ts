@@ -5,9 +5,9 @@ import path from "node:path";
 
 /**
  * Claude Haiku through the Claude subscription: headless Claude Code (`claude -p`)
- * signed in to the subscription, never an Anthropic API key (Peter: everything
- * using the Claude API moves to the Claude subscription, no exceptions; 11:08 PM CT
- * Nov 17 2026).
+ * signed in to the subscription, never an Anthropic API key (Peter, 11:08 PM CT
+ * Nov 17 2026). The caller may fall back to the Claude API only when this reports
+ * the subscription's usage limit (Peter, 11:58 PM CT Nov 17 2026).
  *
  * Three guards keep a key out of every call:
  * 1. The child gets an allowlisted environment, so no ANTHROPIC_API_KEY,
@@ -21,7 +21,7 @@ import path from "node:path";
 
 export const SUBSCRIPTION_ENV_KEEP = ["HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "TZ"] as const;
 const HAIKU = /^claude-haiku-\d[a-z0-9.-]*$/;
-const LIMIT = /usage[_ ]limit|rate[_ -]?limit|hit your .{0,40}limit|\b\d+-hour limit\b|weekly limit|too many requests|\b429\b|out of (?:extra )?usage/i;
+const LIMIT = /usage[_ ]limit|rate[_ -]?limit|hit your .{0,40}limit|reached your .{0,40}limit|limit reached|\b\d+-hour limit\b|weekly limit|too many requests|\b429\b|out of (?:extra )?usage/i;
 const OUTPUT_BOUND = 8 * 1024 * 1024;
 
 export class ClaudeSubscriptionError extends Error {

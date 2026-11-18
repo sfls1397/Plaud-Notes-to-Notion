@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config.js";
-import { buildProfileRuntime, llmKey, openaiKey } from "../src/runtime.js";
+import { anthropicKey, buildProfileRuntime, openaiKey } from "../src/runtime.js";
 import { MemorySecretStore, readSecret, secretEnvName } from "../src/secrets.js";
 
 // Fake values only. Never a real key.
@@ -82,9 +82,26 @@ describe("LLM keys keep today's order: the profile's own key, then the shared ke
     for (const [k, v] of Object.entries(items)) await store.set(k, v);
     return store;
   };
-  it("a Claude model reads no key at all, whatever the environment or Keychain holds", async () => {
+  it("profile variable beats everything", async () => {
     const store = await storeWith({ "anthropic:peter": "kc-own", anthropic: "kc-shared" });
-    expect(await llmKey(store, "peter", "claude-haiku-5-5", { ANTHROPIC_API_KEY_PETER: "env-own", ANTHROPIC_API_KEY: "env-shared" })).toBeUndefined();
+    expect(await anthropicKey(store, "peter", { ANTHROPIC_API_KEY_PETER: "env-own", ANTHROPIC_API_KEY: "env-shared" })).toBe("env-own");
+  });
+  it("the profile's own Keychain key beats the shared variable, as the running service does today", async () => {
+    const store = await storeWith({ "anthropic:peter": "kc-own" });
+    expect(await anthropicKey(store, "peter", { ANTHROPIC_API_KEY: "env-shared" })).toBe("kc-own");
+  });
+  it("shared variable beats the shared Keychain key", async () => {
+    const store = await storeWith({ anthropic: "kc-shared" });
+    expect(await anthropicKey(store, "tim", { ANTHROPIC_API_KEY: "env-shared" })).toBe("env-shared");
+  });
+  it("falls back to the shared Keychain key when nothing else is set", async () => {
+    const store = await storeWith({ anthropic: "kc-shared" });
+    expect(await anthropicKey(store, "tim", {})).toBe("kc-shared");
+  });
+  it("Peter's profile under infisical-run (all variables, empty Keychain) gets its own key", async () => {
+    const store = await storeWith({});
+    expect(await anthropicKey(store, "peter", { ANTHROPIC_API_KEY_PETER: "env-own", ANTHROPIC_API_KEY: "env-shared" })).toBe("env-own");
+    expect(await anthropicKey(store, "tim", { ANTHROPIC_API_KEY_PETER: "env-own", ANTHROPIC_API_KEY: "env-shared" })).toBe("env-shared");
   });
   it("OpenAI follows the same order", async () => {
     expect(await openaiKey(await storeWith({}), "tim", { OPENAI_API_KEY: "env-shared" })).toBe("env-shared");

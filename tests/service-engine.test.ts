@@ -83,12 +83,12 @@ it("switches labeler on the next unit without API keys and retains an in-flight 
   const config = parseConfig({ profiles: { p: { owner: "Alex Example", notionDataSourceId: "0".repeat(32), startAfter: "2026-01-01T00:00:00Z" } } });
   f.write("sol");
   f.transport(`let input="";process.stdin.on("data",data=>input+=data);process.stdin.on("end",()=>{const req=JSON.parse(input);if(req.service!=="plaud"||!req.prompt.includes("Alex Example"))process.exit(3);console.log(JSON.stringify({version:1,engine:"codex",model:"gpt-6.1-sol",text:JSON.stringify({participants:["Sam"]})}));});`);
-  const options = { name: "p", profile: config.profiles.p, config, store, env: f.env, needPlaud: false, needLabeler: true };
+  const options = { name: "p", profile: config.profiles.p, config, store, env: { ...f.env, CLAUDE_SUBSCRIPTION_BIN: process.execPath }, needPlaud: false, needLabeler: true };
   const selected = await buildProfileRuntime(options);
   f.write("claude");
   expect(await selected.labeler.label({ owner: "Alex Example", plaudTitle: "fixture", summaryMarkdown: "Sam speaks", transcriptText: "Sam: hello", knownParticipants: [] })).toEqual({ participants: ["Sam"] });
-  // Back on the claude policy, Haiku runs on the Claude subscription: no API key to read.
-  expect((await buildProfileRuntime(options)).labeler.constructor.name).toBe("ClaudeSubscriptionLabeler");
+  // Back on the claude policy, Haiku runs on the Claude subscription first; no API key is required.
+  expect((await buildProfileRuntime(options)).labeler.constructor.name).toBe("ClaudeLabeler");
 });
 
 it("refuses FIFO policy without blocking before descriptor validation", () => {

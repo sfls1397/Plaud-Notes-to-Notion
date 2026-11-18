@@ -9,7 +9,7 @@ import {
   subscriptionArgs,
   subscriptionEnv
 } from "../src/claude-subscription.js";
-import { createLabeler } from "../src/llm.js";
+import { CLAUDE_API_HOLD_MS, ClaudeLabeler, createLabeler, resetClaudeApiHold } from "../src/llm.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HAIKU = "claude-haiku-5-5";
@@ -22,26 +22,17 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-describe("no model call can reach the Claude API", () => {
-  it("src/ has no Anthropic API endpoint, header or key-reading model path", () => {
-    const offenders: string[] = [];
-    for (const file of sourceFiles(path.join(root, "src"))) {
-      const text = fs.readFileSync(file, "utf8");
-      const rel = path.relative(root, file);
-      for (const banned of ["api.anthropic.com", "x-api-key", "anthropic-version", "/v1/messages"]) {
-        if (text.includes(banned)) offenders.push(`${rel}: ${banned}`);
-      }
-      // Only secrets.ts (the env-name map), redact.ts (scrubbing) and claude-subscription.ts (which strips it) may name it.
-      if (!/(secrets|redact|claude-subscription)\.ts$/.test(rel) && /ANTHROPIC_API_KEY|anthropicKey|anthropicApiKey/.test(text)) {
-        offenders.push(`${rel}: reads an Anthropic API key`);
-      }
-    }
-    expect(offenders).toEqual([]);
+describe("the subscription transport", () => {
+  it("never names the Anthropic API or reads a key", () => {
+    const text = fs.readFileSync(path.join(root, "src", "claude-subscription.ts"), "utf8");
+    expect(text).not.toMatch(/api\.anthropic\.com|x-api-key|anthropic-version|\/v1\/messages|env\.ANTHROPIC_API_KEY|fetch\(/);
   });
 
-  it("a Claude model needs no key and gets the subscription labeler", () => {
-    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", env: { HOME: "/nowhere" } });
-    expect(labeler.constructor.name).toBe("ClaudeSubscriptionLabeler");
+  it("a Claude model gets the subscription-first labeler, with or without a key", () => {
+    for (const anthropicKey of [undefined, "fixture-not-a-key"]) {
+      const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://example.invalid", anthropicKey, env: { HOME: "/nowhere" } });
+      expect(labeler.constructor.name).toBe("ClaudeLabeler");
+    }
   });
 });
 
@@ -151,7 +142,7 @@ process.stdin.on("end", () => {
   it("labels on the subscription; the parent's API key never reaches Claude Code", async () => {
     const fake = fakeClaude({ participants: ["Dana - Acme"] });
     const env = { HOME: os.homedir(), PATH: "/usr/bin:/bin", ANTHROPIC_API_KEY: "fixture-not-a-key", CLAUDE_SUBSCRIPTION_BIN: fake.bin };
-    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", env });
+    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com", env });
     await expect(labeler.label(input)).resolves.toEqual({ participants: ["Dana - Acme"] });
     const seen = JSON.parse(fs.readFileSync(fake.record, "utf8")) as { args: string[]; envNames: string[]; stdinLength: number };
     expect(seen.envNames).not.toContain("ANTHROPIC_API_KEY");
@@ -164,13 +155,68 @@ process.stdin.on("end", () => {
 
   it("refuses a reply from a run that used an API key", async () => {
     const fake = fakeClaude({ apiKeySource: "ANTHROPIC_API_KEY", participants: ["Dana"] });
-    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
+    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com", env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
     await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", transient: false });
   });
 
   it("a subscription usage limit is a usage-limit LlmError", async () => {
     const fake = fakeClaude({ limit: true });
-    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
+    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com", env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
     await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", transient: true, usageLimit: true });
+  });
+
+  // Peter, 11:58 PM CT Nov 17 2026: services outside T3 use the Claude subscription first and the Claude API only
+  // while the subscription is at its usage limit, then go back to it.
+  function apiStub() {
+    const seen: Array<{ url: string; model: string; key: boolean }> = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const headers = init?.headers as Record<string, string>;
+      seen.push({ url: String(url), model: JSON.parse(String(init?.body)).model, key: Boolean(headers["x-api-key"]) });
+      return new Response(JSON.stringify({ content: [{ type: "tool_use", id: "t", name: "plaud_labels", input: { participants: ["From The API"] } }] }));
+    }) as unknown as typeof fetch;
+    return { seen, fetchImpl };
+  }
+
+  it("never calls the Claude API while the subscription answers, even with an Anthropic key", async () => {
+    const fake = fakeClaude({ participants: ["Dana - Acme"] });
+    const api = apiStub();
+    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com",
+      anthropicKey: "fixture-not-a-key", fetchImpl: api.fetchImpl, env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
+    await expect(labeler.label(input)).resolves.toEqual({ participants: ["Dana - Acme"] });
+    await expect(labeler.label(input)).resolves.toEqual({ participants: ["Dana - Acme"] });
+    expect(api.seen).toEqual([]);
+  });
+
+  it("on the subscription's limit labels go to the Claude API with the same model for 15 minutes, then the subscription again", async () => {
+    resetClaudeApiHold();
+    const limited = fakeClaude({ limit: true });
+    const api = apiStub();
+    let clock = 5_000_000;
+    const env = { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: limited.bin };
+    const labeler = new ClaudeLabeler({ model: HAIKU, env, apiKey: "fixture-not-a-key", apiBaseUrl: "https://api.anthropic.com", fetchImpl: api.fetchImpl, now: () => clock, log: () => {} });
+    try {
+      await expect(labeler.label(input)).resolves.toEqual({ participants: ["From The API"] });
+      expect(api.seen).toEqual([{ url: "https://api.anthropic.com/v1/messages", model: HAIKU, key: true }]);
+      fs.rmSync(limited.record);
+      clock += CLAUDE_API_HOLD_MS - 1;
+      await expect(labeler.label(input)).resolves.toEqual({ participants: ["From The API"] });
+      expect(fs.existsSync(limited.record)).toBe(false);
+      const back = fakeClaude({ participants: ["Dana - Acme"] });
+      env.CLAUDE_SUBSCRIPTION_BIN = back.bin;
+      clock += 2;
+      await expect(labeler.label(input)).resolves.toEqual({ participants: ["Dana - Acme"] });
+      expect(api.seen.length).toBe(2);
+    } finally {
+      resetClaudeApiHold();
+    }
+  });
+
+  it("a refused subscription run is not a limit, so it never falls back to the Claude API", async () => {
+    const fake = fakeClaude({ apiKeySource: "ANTHROPIC_API_KEY", participants: ["Dana"] });
+    const api = apiStub();
+    const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com",
+      anthropicKey: "fixture-not-a-key", fetchImpl: api.fetchImpl, env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
+    await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", transient: false });
+    expect(api.seen).toEqual([]);
   });
 });
