@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LLM_MAX_ATTEMPTS } from "../src/constants.js";
 import { runIngest, type IngestDeps } from "../src/ingest.js";
+import { LlmError } from "../src/llm.js";
 import { emptyState, type ProfileState } from "../src/state.js";
 import { CARD_NUMBER_REPLACEMENT } from "../src/card.js";
 import { SSN_REPLACEMENT } from "../src/ssn.js";
@@ -162,6 +163,31 @@ describe("runIngest", () => {
     await runIngest(d);
     expect(d.notion.rows.map((r) => r.title)).toEqual(["Budget Review With Jim", "Budget Review With Jim"]);
     expect(d.state.files.of_1.labelSource).toBe("fallback");
+  });
+
+  it("a Claude subscription usage limit leaves the note waiting without spending a labeling attempt", async () => {
+    const d = deps();
+    d.plaud.add({ id: "of_1", name: "09-26 Budget Review With Jim" });
+    const limited = new LlmError("Claude subscription usage limit", true, true);
+    let limitedCalls = 0;
+    d.labeler.label = async () => {
+      limitedCalls++;
+      throw limited;
+    };
+    for (let i = 0; i < LLM_MAX_ATTEMPTS + 2; i++) {
+      const r = await runIngest(d);
+      expect(r.pending).toBe(1);
+    }
+    expect(limitedCalls).toBe(LLM_MAX_ATTEMPTS + 2);
+    expect(d.notion.rows).toHaveLength(0);
+    expect(d.state.files.of_1.llmAttempts).toBe(0);
+    expect(d.state.files.of_1.status).toBe("pending");
+    expect(d.logs.join("\n")).toMatch(/usage limit/);
+    // Once the subscription answers again, the note is written with real labels.
+    d.labeler.label = FakeLabeler.prototype.label.bind(d.labeler);
+    await runIngest(d);
+    expect(d.notion.rows.map((r) => r.title)).toEqual(["Budget Review With Jim", "Budget Review With Jim"]);
+    expect(d.state.files.of_1.labelSource).toBe("llm");
   });
 
   it("dry run writes nothing", async () => {

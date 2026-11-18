@@ -8,7 +8,7 @@ import { getConfigPath, getLogFilePath } from "./paths.js";
 import { runPlaudLogin } from "./plaud/login.js";
 import { createAuthSession } from "./plaud/session.js";
 import { safeErrorMessage } from "./redact.js";
-import { buildProfileRuntime, llmKey, readStatus } from "./runtime.js";
+import { anthropicFallbackKey, buildProfileRuntime, llmKey, readStatus, requireClaudeCode } from "./runtime.js";
 import { createSecretStore, readSecret, type SecretStore } from "./secrets.js";
 import { loadState, saveState } from "./state.js";
 import { scrubSensitive } from "./scrub.js";
@@ -120,16 +120,22 @@ async function doctor(profileName: string, store: SecretStore): Promise<number> 
     } catch (err) {
       line(false, `Plaud: ${safeErrorMessage(err)}`);
     }
-    try {
-      await llmKey(store, creds, config.llmModel, process.env);
-      line(
-        true,
-        isAnthropicModel(config.llmModel)
-          ? `Anthropic key present (model ${config.llmModel})`
-          : `OpenAI key present (model ${config.llmModel}, effort ${config.llmEffort})`
-      );
-    } catch (err) {
-      line(false, safeErrorMessage(err));
+    if (isAnthropicModel(config.llmModel)) {
+      try {
+        requireClaudeCode(process.env);
+        line(true, `Claude Code present for the Claude subscription (model ${config.llmModel})`);
+      } catch (err) {
+        line(false, safeErrorMessage(err));
+      }
+      const fallback = await anthropicFallbackKey(store, creds, process.env);
+      console.log(`  ${fallback ? "Anthropic key present: the Claude API fallback while the subscription is at its usage limit" : "No Anthropic key: on the subscription's usage limit notes wait for it"}`);
+    } else {
+      try {
+        await llmKey(store, creds, config.llmModel, process.env);
+        line(true, `OpenAI key present (model ${config.llmModel}, effort ${config.llmEffort})`);
+      } catch (err) {
+        line(false, safeErrorMessage(err));
+      }
     }
   }
   return ok ? 0 : 1;

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { claudeBinary } from "./claude-subscription.js";
 import { spawn } from "node:child_process";
 import type { AppConfig, ProfileConfig } from "./config.js";
 import {
@@ -51,6 +53,21 @@ export async function anthropicKey(store: SecretStore, credentials: string, env:
   return key;
 }
 
+/** The Anthropic key if one is stored: only the fallback while the Claude subscription is at its usage limit, so none is fine. */
+export async function anthropicFallbackKey(store: SecretStore, credentials: string, env: NodeJS.ProcessEnv): Promise<string | undefined> {
+  return (await readSecret(store, anthropicAccount(credentials), env)) || (await readSecret(store, ANTHROPIC_ACCOUNT, env)) || undefined;
+}
+
+/** Claude Code must be runnable: Claude models run on the Claude subscription first. */
+export function requireClaudeCode(env: NodeJS.ProcessEnv): void {
+  const bin = claudeBinary(env);
+  try {
+    fs.accessSync(bin, fs.constants.X_OK);
+  } catch {
+    throw new SetupError(`Claude Code is not runnable at ${bin}. Claude models run on the Claude subscription: install Claude Code and sign it in with \`claude /login\` (the Anthropic key is only the fallback for its usage limit).`);
+  }
+}
+
 /** The API key for the configured model's provider; SetupError naming the right `set-secret` if missing. */
 export async function llmKey(store: SecretStore, credentials: string, model: string, env: NodeJS.ProcessEnv): Promise<string> {
   return isAnthropicModel(model) ? anthropicKey(store, credentials, env) : openaiKey(store, credentials, env);
@@ -94,14 +111,17 @@ export async function buildProfileRuntime(options: {
       labeler = solLabeler(env);
     } else {
       const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
-      const key = await llmKey(options.store, creds, llmModel, env);
+      const claude = isAnthropicModel(llmModel);
+      // Claude: the Claude subscription first, the Anthropic key (if stored) only on its usage limit.
+      if (claude) requireClaudeCode(env);
       labeler = createLabeler({
         model: llmModel,
         effort: llmEffort,
-        openaiKey: isAnthropicModel(llmModel) ? undefined : key,
-        anthropicKey: isAnthropicModel(llmModel) ? key : undefined,
+        openaiKey: claude ? undefined : await openaiKey(options.store, creds, env),
+        anthropicKey: claude ? await anthropicFallbackKey(options.store, creds, env) : undefined,
         openaiBaseUrl,
-        anthropicBaseUrl
+        anthropicBaseUrl,
+        env
       });
     }
   }

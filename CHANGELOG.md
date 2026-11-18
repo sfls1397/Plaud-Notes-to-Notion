@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.9
+
+- Claude Haiku participant labels run on the Claude subscription first, through headless Claude Code (allowlisted child environment, `--setting-sources ""`; a reply is accepted only when Claude Code reports the subscription sign-in, `apiKeySource: "none"`, and a Haiku model). The Anthropic key, when stored, is used only while the subscription is at its plan usage limit (Toolbox claude-side's wording): the same model on the Messages API for 15 minutes, then the subscription again. A session or 5-hour limit waits without the API; a server throttle ("not your usage limit") or a bare 429 is an ordinary failure. With no key, a limit leaves the recording waiting without spending a labeling attempt. A daemon whose Claude Code is not runnable stops with a setup error.
+
 ## 1.2.8
 
 - Avoid overlapping scans of malformed per-profile secret names while retaining redaction for long profile names.

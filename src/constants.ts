@@ -36,7 +36,7 @@ export const DEFAULT_LLM_MODEL = "claude-haiku-5-5";
 export const DEFAULT_LLM_EFFORT = "high";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
-/** `claude-*` models go to Anthropic's Messages API; everything else to OpenAI. */
+/** `claude-*` models run on the Claude subscription (Anthropic's Messages API only on its usage limit); everything else on OpenAI. */
 export const isAnthropicModel = (model: string): boolean => /^claude-/i.test(model.trim());
 /** Transcript characters sent to the labeler (names usually surface early). */
 export const LLM_TRANSCRIPT_CHARS = 24_000;

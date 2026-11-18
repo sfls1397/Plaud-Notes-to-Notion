@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config.js";
-import { AnthropicLabeler, createLabeler, LlmError, OpenAiLabeler } from "../src/llm.js";
+import { AnthropicLabeler, ClaudeLabeler, createLabeler, LlmError, OpenAiLabeler } from "../src/llm.js";
 import { redactSecrets } from "../src/redact.js";
 import { buildProfileRuntime } from "../src/runtime.js";
 import { MemorySecretStore } from "../src/secrets.js";
@@ -82,12 +82,12 @@ describe("AnthropicLabeler", () => {
 
 describe("createLabeler", () => {
   const base = { effort: "high", openaiBaseUrl: "https://o.test/v1", anthropicBaseUrl: "https://a.test" };
-  it("routes claude-* to Anthropic and anything else to OpenAI", () => {
-    expect(createLabeler({ ...base, model: "claude-haiku-5-5", anthropicKey: "a" })).toBeInstanceOf(AnthropicLabeler);
+  it("routes claude-* to the Claude subscription (the Anthropic key only its limit fallback) and anything else to OpenAI", () => {
+    expect(createLabeler({ ...base, model: "claude-haiku-5-5", anthropicKey: "a" })).toBeInstanceOf(ClaudeLabeler);
+    expect(createLabeler({ ...base, model: "claude-haiku-5-5" })).toBeInstanceOf(ClaudeLabeler);
     expect(createLabeler({ ...base, model: "gpt-6-luna", openaiKey: "o" })).toBeInstanceOf(OpenAiLabeler);
   });
-  it("fails loud when the model's provider key is missing", () => {
-    expect(() => createLabeler({ ...base, model: "claude-haiku-5-5", openaiKey: "o" })).toThrow(/Anthropic/);
+  it("fails loud when an OpenAI model has no OpenAI key", () => {
     expect(() => createLabeler({ ...base, model: "gpt-6-luna", anthropicKey: "a" })).toThrow(/OpenAI/);
   });
 });
@@ -114,16 +114,23 @@ describe("buildProfileRuntime labeler key", () => {
   const profile = parseConfig({
     profiles: { p: { owner: "Alex Example", notionDataSourceId: "0".repeat(32), startAfter: "2026-01-01T00:00:00Z" } }
   }).profiles.p;
+  let claude = process.execPath;
   const build = async (llmModel: string, secrets: Record<string, string>) => {
     const store = new MemorySecretStore();
     await store.set("notion:p", "n");
     for (const [k, v] of Object.entries(secrets)) await store.set(k, v);
     const config = parseConfig({ llmModel });
-    return buildProfileRuntime({ name: "p", profile, config, store, env: {}, needPlaud: false, needLabeler: true });
+    return buildProfileRuntime({ name: "p", profile, config, store, env: { CLAUDE_SUBSCRIPTION_BIN: claude }, needPlaud: false, needLabeler: true });
   };
-  it("names set-secret anthropic when Haiku is configured and the key is missing", async () => {
-    await expect(build("claude-haiku-5-5", { openai: "o" })).rejects.toThrow(/set-secret anthropic/);
-    await expect(build("claude-haiku-5-5", { anthropic: "a" })).resolves.toBeDefined();
+  it("Haiku runs on the Claude subscription: the Anthropic key is optional (its limit fallback), Claude Code is required", async () => {
+    await expect(build("claude-haiku-5-5", { openai: "o" })).resolves.toBeDefined();
+    expect((await build("claude-haiku-5-5", { anthropic: "a" })).labeler).toBeInstanceOf(ClaudeLabeler);
+    claude = "/nonexistent/claude";
+    try {
+      await expect(build("claude-haiku-5-5", { anthropic: "a" })).rejects.toThrow(/Claude Code is not runnable/);
+    } finally {
+      claude = process.execPath;
+    }
   });
   it("names set-secret openai when Luna is configured and the key is missing", async () => {
     await expect(build("gpt-6-luna", { anthropic: "a" })).rejects.toThrow(/set-secret openai/);

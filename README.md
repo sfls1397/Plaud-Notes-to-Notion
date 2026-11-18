@@ -12,7 +12,7 @@ onto the matching **Transcript** row.
 
 Before anything leaves your Mac, Social Security numbers and payment-card
 details are removed from the summary, transcript, and title. Participant names
-are filled in by a language model (Anthropic Claude by default, or OpenAI).
+are filled in by a language model (Claude Haiku on the Claude subscription by default, with the Anthropic API only on its usage limit; or OpenAI).
 
 No runtime dependencies beyond Node.js 20 or later.
 
@@ -76,14 +76,20 @@ to one Notion database; profiles differ only in *who* and *where*:
 
 ### LLM (participant labeling)
 
-`llmModel` picks the provider: `claude-*` → Anthropic Messages API (key
-`anthropic`), anything else → OpenAI Responses API (key `openai`). Default is
-`claude-haiku-5-5`. `anthropicBaseUrl` and `openaiBaseUrl` override the API
-endpoints.
+`llmModel` picks the provider: `claude-*` → the Claude subscription through
+headless Claude Code (`~/.local/bin/claude`, signed in with `claude /login`, or
+`CLAUDE_SUBSCRIPTION_BIN`), anything else → OpenAI Responses API (key `openai`).
+Default is `claude-haiku-5-5`. The Anthropic key (`anthropic`) is optional and
+used only while the subscription is at its plan usage limit: the same model on
+the Anthropic Messages API for 15 minutes, then the subscription again. A
+session or 5-hour limit waits for the subscription; a server throttle or a bare
+429 never moves to the API. With no key,
+a limited note waits for the subscription without spending a labeling attempt.
+`anthropicBaseUrl` and `openaiBaseUrl` override the API endpoints.
 
 | Want | `config.json` | Key needed |
 | --- | --- | --- |
-| Claude Haiku (default) | omit `llmModel`, or `"llmModel": "claude-haiku-5-5"` | `set-secret anthropic` |
+| Claude Haiku (default) | omit `llmModel`, or `"llmModel": "claude-haiku-5-5"` | Claude Code signed in to the Claude subscription; `set-secret anthropic` only for the usage-limit fallback |
 | OpenAI | e.g. `"llmModel": "gpt-6-luna", "llmEffort": "high"` | `set-secret openai` |
 
 `llmEffort` only applies to OpenAI. Claude requests use high effort, automatic
@@ -119,7 +125,7 @@ the daemon, so it always stays in the Keychain.
 npm install -g plaud-notes-to-notion        # or build from a checkout: npm ci && npm run build
 plaud-notes-to-notion login --profile alex   # opens Plaud → sign in → Authorize
 plaud-notes-to-notion set-secret notion --profile alex   # Notion internal integration secret (paste, hidden)
-plaud-notes-to-notion set-secret anthropic               # Anthropic API key (shared; the default model)
+plaud-notes-to-notion set-secret anthropic               # Anthropic API key (shared; only the fallback on the Claude subscription's usage limit)
 plaud-notes-to-notion set-secret openai                  # OpenAI API key (shared; only if llmModel is not claude-*)
 plaud-notes-to-notion doctor --profile alex
 sh "$(npm root -g)/plaud-notes-to-notion/examples/install-launchagent.sh"
