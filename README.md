@@ -87,8 +87,8 @@ session or 5-hour limit waits for the subscription; a server throttle or a bare
 a limited note waits for the subscription without spending a labeling attempt.
 The first limit also holds every label for the same 15 minutes (no Claude Code
 is started meanwhile) and ends that poll cycle, so a limited subscription costs
-one `claude -p` run and one log line per 15 minutes, not one per waiting note
-every 30 seconds.
+one `claude -p` run per 15 minutes and one log line per poll cycle, not a run
+and a log line per waiting note every 30 seconds.
 `anthropicBaseUrl` and `openaiBaseUrl` override the API endpoints.
 
 | Want | `config.json` | Key needed |
