@@ -144,7 +144,8 @@ export function prepareRecording(rec: PlaudRecording): PreparedRecording {
   };
 }
 
-async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileState, result: IngestResult): Promise<void> {
+/** "limit": the Claude subscription is at a usage limit, so every later label this cycle would fail the same way. */
+async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileState, result: IngestResult): Promise<"limit" | void> {
   const now = (deps.now || (() => new Date()))();
   const rec = await deps.plaud.getRecording(file.id);
   st.name = rec.name;
@@ -188,7 +189,7 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
         // wait never counts toward the no-participants fallback.
         deps.log(`[${deps.profile}] Claude subscription at its usage limit; "${prepared.plaudTitle}" waits for it`);
         result.pending++;
-        return;
+        return "limit";
       }
       st.llmAttempts++;
       if (deps.labeler.allowFallback === false) throw err;
@@ -260,11 +261,16 @@ export async function runIngest(deps: IngestDeps, options: { deep?: boolean } = 
   if (!deps.state.baselineAt) {
     await runBaseline(deps);
   }
-  for (const file of await candidates(deps, options.deep === true)) {
+  const files = await candidates(deps, options.deep === true);
+  for (const [index, file] of files.entries()) {
     result.checked++;
     const st = (deps.state.files[file.id] ||= { status: "pending", firstSeen: now.toISOString(), llmAttempts: 0 });
     try {
-      await processOne(deps, file, st, result);
+      if ((await processOne(deps, file, st, result)) === "limit") {
+        // One limit ends the cycle: the other notes keep waiting and are tried next cycle.
+        result.pending += files.length - index - 1;
+        break;
+      }
     } catch (err) {
       st.lastError = safeErrorMessage(err);
       if (st.status === "pending") result.pending++;

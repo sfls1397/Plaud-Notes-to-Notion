@@ -85,6 +85,10 @@ the Anthropic Messages API for 15 minutes, then the subscription again. A
 session or 5-hour limit waits for the subscription; a server throttle or a bare
 429 never moves to the API. With no key,
 a limited note waits for the subscription without spending a labeling attempt.
+The first limit also holds every label for the same 15 minutes (no Claude Code
+is started meanwhile) and ends that poll cycle, so a limited subscription costs
+one `claude -p` run and one log line per 15 minutes, not one per waiting note
+every 30 seconds.
 `anthropicBaseUrl` and `openaiBaseUrl` override the API endpoints.
 
 | Want | `config.json` | Key needed |
@@ -122,7 +126,7 @@ the daemon, so it always stays in the Keychain.
 ## Setup (macOS, logged-in GUI session)
 
 ```bash
-npm install -g plaud-notes-to-notion        # or build from a checkout: npm ci && npm run build
+npm install -g plaud-notes-to-notion        # the published package (see Deploy); a checkout is for development only
 plaud-notes-to-notion login --profile alex   # opens Plaud → sign in → Authorize
 plaud-notes-to-notion set-secret notion --profile alex   # Notion internal integration secret (paste, hidden)
 plaud-notes-to-notion set-secret anthropic               # Anthropic API key (shared; only the fallback on the Claude subscription's usage limit)
@@ -142,6 +146,15 @@ link instead of opening it.
 
 The install script writes `~/Library/LaunchAgents/com.plaud-notes-to-notion.plist`
 for the current user and loads it; it runs `plaud-notes-to-notion run`.
+
+## Deploy
+
+The running service is only ever the published npm package. After a change is
+merged: bump the version (`package.json`, `package-lock.json`, `CHANGELOG.md`),
+publish a GitHub Release (its workflow tests, then publishes to npm), and on the
+Mac run `npm install -g plaud-notes-to-notion@<version>`, then restart the
+LaunchAgent. Never `git pull` or build in the checkout the LaunchAgent runs
+from as a deploy step; `npm run build` in a checkout is for development.
 
 ## Everyday commands
 

@@ -108,6 +108,7 @@ describe("readReply", () => {
 describe("end to end through a fake Claude Code", () => {
   const dirs: string[] = [];
   afterEach(() => {
+    resetClaudeApiHold();
     for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -211,6 +212,51 @@ process.stdin.on("end", () => {
     }
   });
 
+  it("with no key, a limit holds every label for 15 minutes without spawning Claude Code, then tries the subscription again", async () => {
+    resetClaudeApiHold();
+    const limited = fakeClaude({ limit: true });
+    let clock = 9_000_000;
+    const lines: string[] = [];
+    const env = { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: limited.bin };
+    const labeler = new ClaudeLabeler({ model: HAIKU, env, apiBaseUrl: "https://api.anthropic.com", now: () => clock, log: (line) => lines.push(line) });
+    await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", usageLimit: true });
+    expect(fs.existsSync(limited.record)).toBe(true);
+    fs.rmSync(limited.record);
+    clock += CLAUDE_API_HOLD_MS - 1;
+    for (let i = 0; i < 3; i++) {
+      await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", usageLimit: true, planLimit: false });
+    }
+    expect(fs.existsSync(limited.record)).toBe(false);
+    expect(lines).toHaveLength(1);
+    clock += 2;
+    await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", usageLimit: true });
+    expect(fs.existsSync(limited.record)).toBe(true);
+  });
+
+  it("a session limit with a key present is held the same way and never reaches the Claude API", async () => {
+    resetClaudeApiHold();
+    const limited = fakeClaude({ limit: "5-hour limit reached ∙ resets 3am" });
+    const api = apiStub();
+    const env = { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: limited.bin };
+    const labeler = new ClaudeLabeler({ model: HAIKU, env, apiKey: "fixture-not-a-key", apiBaseUrl: "https://api.anthropic.com", fetchImpl: api.fetchImpl, log: () => {} });
+    await expect(labeler.label(input)).rejects.toMatchObject({ usageLimit: true, planLimit: false });
+    fs.rmSync(limited.record);
+    await expect(labeler.label(input)).rejects.toMatchObject({ usageLimit: true, planLimit: false });
+    expect(fs.existsSync(limited.record)).toBe(false);
+    expect(api.seen).toEqual([]);
+  });
+
+  it("a plain failure (not a limit) sets no hold: the next label tries the subscription again", async () => {
+    resetClaudeApiHold();
+    const failing = fakeClaude({ limit: "Not logged in · Please run /login" });
+    const env = { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: failing.bin };
+    const labeler = new ClaudeLabeler({ model: HAIKU, env, apiBaseUrl: "https://api.anthropic.com", log: () => {} });
+    await expect(labeler.label(input)).rejects.toMatchObject({ usageLimit: false });
+    fs.rmSync(failing.record);
+    await expect(labeler.label(input)).rejects.toMatchObject({ usageLimit: false });
+    expect(fs.existsSync(failing.record)).toBe(true);
+  });
+
   it("a server throttle or bare 429 is a plain failure and a session limit only waits: neither falls back to the Claude API", async () => {
     const api = apiStub();
     for (const [words, expected] of [
@@ -219,6 +265,7 @@ process.stdin.on("end", () => {
       ["Session limit reached ∙ resets 3am", { usageLimit: true, planLimit: false }],
       ["5-hour limit reached ∙ resets 3am", { usageLimit: true, planLimit: false }]
     ] as const) {
+      resetClaudeApiHold(); // each case is its own first limit, not a label held by the one before
       const fake = fakeClaude({ limit: words });
       const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com",
         anthropicKey: "fixture-not-a-key", fetchImpl: api.fetchImpl, env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });
