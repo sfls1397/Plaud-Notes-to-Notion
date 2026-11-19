@@ -263,10 +263,16 @@ export class AnthropicLabeler implements Labeler {
 /** After a subscription limit, labels go straight to the Claude API for this long, then the subscription is tried again (as Toolbox claude-side does). */
 export const CLAUDE_API_HOLD_MS = 15 * 60 * 1000;
 let claudeApiUntil = 0;
+/**
+ * After a subscription limit the Claude API does not answer (no key, or a session/5-hour limit), labels are not
+ * attempted for this long (the same 15-minute clock): each attempt is a `claude -p` spawn that can only fail again.
+ */
+let claudeWaitUntil = 0;
 
 /** Test hook: forget a fallback hold left by an earlier label in this process. */
 export function resetClaudeApiHold(): void {
   claudeApiUntil = 0;
+  claudeWaitUntil = 0;
 }
 
 /**
@@ -293,9 +299,17 @@ export class ClaudeLabeler implements Labeler {
     if (this.api && this.now() < claudeApiUntil) {
       return this.api.label(input);
     }
+    if (this.now() < claudeWaitUntil) {
+      throw new LlmError("Claude subscription at its usage limit; waiting before the next try", true, true, false);
+    }
     try {
       return await this.subscription.label(input);
     } catch (error) {
+      if (error instanceof LlmError && error.usageLimit && !(this.api && error.planLimit)) {
+        // Nothing answers this limit: wait out the hold instead of spawning `claude -p` again every poll.
+        claudeWaitUntil = this.now() + CLAUDE_API_HOLD_MS;
+        this.log("Claude subscription is at a usage limit: no labels are attempted for the next 15 minutes, then the subscription again.");
+      }
       if (!this.api || !(error instanceof LlmError) || !error.planLimit) {
         throw error;
       }

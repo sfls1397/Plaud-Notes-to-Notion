@@ -190,6 +190,26 @@ describe("runIngest", () => {
     expect(d.state.files.of_1.labelSource).toBe("llm");
   });
 
+  it("one usage limit ends the cycle: the other waiting notes are not labeled until the next cycle", async () => {
+    const d = deps();
+    for (const id of ["of_1", "of_2", "of_3"]) d.plaud.add({ id, name: `09-26 Budget Review ${id}` });
+    let calls = 0;
+    d.labeler.label = async () => {
+      calls++;
+      throw new LlmError("Claude subscription usage limit", true, true);
+    };
+    const r = await runIngest(d);
+    expect(calls).toBe(1);
+    expect(r.pending).toBe(3);
+    expect(r.errors).toEqual([]);
+    expect(d.logs.filter((line) => /usage limit/.test(line))).toHaveLength(1);
+    expect(Object.values(d.state.files).every((f) => f.status === "pending" && f.llmAttempts === 0)).toBe(true);
+    // The next cycle, once the subscription answers, writes all three.
+    d.labeler.label = FakeLabeler.prototype.label.bind(d.labeler);
+    const next = await runIngest(d);
+    expect(next.written).toHaveLength(3);
+  });
+
   it("dry run writes nothing", async () => {
     const d = deps({ dryRun: true });
     d.plaud.add({ id: "of_1" });

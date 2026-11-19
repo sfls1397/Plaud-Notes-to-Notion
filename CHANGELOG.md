@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.10
+
+- While the Claude subscription is at a usage limit that nothing answers (no Anthropic key, or a session/5-hour limit), the first limit holds every label for 15 minutes (the same clock as the API hold) without starting Claude Code, and ends that poll cycle: one `claude -p` run per 15 minutes and one "waits for it" log line per poll cycle, instead of a run and a log line per waiting note every 30 seconds. The notes stay pending and spend no labeling attempt.
+- README: add a Deploy section (GitHub Release, then `npm install -g` of the published version; never pull or build in the live checkout).
+
 ## 1.2.9
 
 - Claude Haiku participant labels run on the Claude subscription first, through headless Claude Code (allowlisted child environment, `--setting-sources ""`; a reply is accepted only when Claude Code reports the subscription sign-in, `apiKeySource: "none"`, and a Haiku model). The Anthropic key, when stored, is used only while the subscription is at its plan usage limit (Toolbox claude-side's wording): the same model on the Messages API for 15 minutes, then the subscription again. A session or 5-hour limit waits without the API; a server throttle ("not your usage limit") or a bare 429 is an ordinary failure. With no key, a limit leaves the recording waiting without spending a labeling attempt. A daemon whose Claude Code is not runnable stops with a setup error.
