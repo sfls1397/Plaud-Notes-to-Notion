@@ -80,6 +80,25 @@ def audit(root, policy):
     print('npm audit gate PASS (production dependencies; high threshold)')
 
 
+def audit_lint(root):
+    lint = root / '.lint'
+    if not (lint / 'package-lock.json').exists() and not (lint / 'package.json').exists():
+        return
+    for name in ('package.json', 'package-lock.json'):
+        if not (lint / name).is_file() or (lint / name).is_symlink():
+            raise RuntimeError('Lint dependency manifests must both be regular files')
+    result = command(['npm', 'audit', '--audit-level=high', '--json'], lint)
+    data = json.loads(result.stdout)
+    if data.get('error') or result.returncode not in (0, 1) or 'vulnerabilities' not in data:
+        raise RuntimeError('npm audit could not complete for the lint tools; check registry connectivity')
+    blocked = [name for name, item in data['vulnerabilities'].items() if item['severity'] in ('high', 'critical')]
+    for name in blocked:
+        print('npm audit (.lint tools): %s high or critical (BLOCKED)' % name)
+    if blocked:
+        raise RuntimeError('High or critical findings in the lint tools block this gate')
+    print('npm audit gate PASS (.lint tool dependencies; high threshold)')
+
+
 def semgrep(root, policy, targets=None):
     if not shutil.which('semgrep'):
         raise RuntimeError('Semgrep missing; install the repository pin before retrying')
@@ -148,6 +167,7 @@ def full():
                 shutil.copyfile(source, target)
         reviewed = policy(snapshot)
         audit(snapshot, reviewed)
+        audit_lint(snapshot)
         normalize_parser(snapshot)
         semgrep(snapshot, reviewed)
         language_scan(snapshot)
@@ -160,6 +180,9 @@ def staged():
         snapshot = Path(directory)
         # Use the index for tools, configuration, package metadata and candidate source.
         required = ['.semgrepignore', 'package.json', 'package-lock.json']
+        lint_manifests = ['.lint/package.json', '.lint/package-lock.json']
+        if any(git(['ls-files', '--', name]).strip() for name in lint_manifests):
+            required += lint_manifests
         tooling = [os.fsdecode(p) for p in git(['ls-files', '-z', '.security']).split(b'\0') if p]
         for name in dict.fromkeys(changed + required + tooling):
             path = Path(name)
@@ -180,6 +203,8 @@ def staged():
         reviewed = policy(snapshot)
         if any(x in changed for x in ['package.json', 'package-lock.json', '.security/policy.json']):
             audit(snapshot, reviewed)
+        if any(x in changed for x in lint_manifests):
+            audit_lint(snapshot)
         # Include tests and scripts; only generated/vendor paths are ignored.
         targets = [x for x in changed if (snapshot / x).is_file()
                    and Path(x).suffix in ('.js', '.cjs', '.mjs', '.jsx', '.ts', '.tsx', '.py')]
