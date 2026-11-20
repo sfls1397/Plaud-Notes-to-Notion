@@ -1,0 +1,12 @@
+{
+  "name": "plaud-notes-to-notion-lint-tools",
+  "private": true,
+  "description": "The pinned lint and type checkers for the gate's lint step (.security/lint.py), installed by .cursor/install-lint.sh. Never a dependency of the product itself.",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "eslint": "10.14.0",
+    "pyright": "1.1.414",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.73.0"
+  }
+}

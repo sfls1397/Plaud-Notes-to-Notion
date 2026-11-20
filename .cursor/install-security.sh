@@ -5,6 +5,7 @@ export PATH="$HOME/.local/bin:$PATH"
 bash .cursor/install-gitleaks.sh
 bash .cursor/install-semgrep.sh
 bash .cursor/install-shellcheck.sh
+bash .cursor/install-lint.sh
 # CI has no committer identity by default; do not inherit a runner hostname.
 if ! git config user.email >/dev/null; then git config user.email '241515594+sfls1397@users.noreply.github.com'; fi
 if ! git config user.name >/dev/null; then git config user.name 'Repository Agent'; fi
