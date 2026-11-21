@@ -27,3 +27,6 @@ Code comments are banned here (docs/TYPES-AND-LINT.md → The comment ban), so e
 | An audit exception pins every affected installed version and advisory chain, not just the package name | `.security/scan.py` `audit_key` | A name alone would let a later, different vulnerable version ride on an old exception. |
 | The installer sets a GitHub noreply committer identity when none is configured | `.cursor/install-security.sh` | CI has no committer identity by default, and an unset one would take the runner's hostname. |
 | Semgrep installs through the system pip | `.cursor/install-semgrep.sh` | Default cloud images omit `ensurepip`; the same pin is kept. |
+| OpenAI labels default to GPT-6 Luna at high reasoning effort | `src/constants.ts`, `src/llm.ts` | On a 9 recording test high gave the same labels as max with about 3.5 times fewer output tokens. The effort is ignored for Claude models. |
+| Participant names have commas stripped | `src/format.ts` `cleanParticipants` | Notion rejects commas in multi-select options. Held by "removes the owner, generic labels, commas and duplicates" in `tests/format.test.ts`. |
+| The scrub command is a one off for rows written before a redaction existed, and is a dry run unless `apply` is set | `src/scrub.ts` | SSNs were not redacted in the Zap era and cards not before 2026-10-01. |

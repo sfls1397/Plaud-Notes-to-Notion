@@ -93,7 +93,7 @@ and a log line per waiting note every 30 seconds.
 Why it works this way:
 
 - Haiku labels run on the Claude subscription and never on an Anthropic key (Peter: everything that used the Claude API moves to the Claude subscription, no exceptions; 11:08 PM CT Nov 17 2026; T3 Code chat T3-Agent Team Coordinator).
-- The Claude API is the fallback only while the subscription is at its plan usage limit, then labels go back to the subscription (Peter: services outside T3 may use the Claude API when the subscription is up, then return to it; 11:58 PM CT Nov 17 2026; T3 Code chat T3-Agent Team Coordinator).
+- The Claude API is the fallback only while the subscription is at its plan usage limit, then labels go back to the subscription (Peter: services outside T3 fall back to the Claude API only at the subscription's usage limit, then return to it; 11:58 PM CT Nov 17 2026; T3 Code chat T3-Agent Team Coordinator).
 - A one-time failure, a server throttle or a bare 429 never falls back to the API (Peter: never fall back to the API on a one-time failure; 8:53 AM CT Nov 11 2026; T3 Code chat Figure out why both Claude providers don't work). The limit wording is Toolbox claude-side's `USAGE_LIMIT` in `lib/claude_side.py`.
 - The tests that hold these rules are named for them in `tests/claude-subscription.test.ts`; the guards the code keeps beyond these are listed in [docs/GUARDS.md](docs/GUARDS.md).
 `anthropicBaseUrl` and `openaiBaseUrl` override the API endpoints.
