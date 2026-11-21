@@ -204,7 +204,7 @@ describe("scrubSensitive", () => {
     scrubSensitive({ token: "t", dataSourceId: "ds", apply: true, log: () => undefined, fetchImpl: scrubFetch(rich, patches) });
   const piece = (text: string) => ({ type: "text", plain_text: text, text: { content: text, link: null }, annotations: { bold: false } });
 
-  it("redacts adjacent runs of the same formatting as one string, so a number split across runs is still caught", async () => {
+  it("redacts adjacent runs of the same formatting as one string, so a number split across runs is still caught (the Zap wrote whole transcripts as runs of up to 11,000 characters)", async () => {
     const patches: Array<{ rich_text: Array<{ text: { content: string } }> }> = [];
     const result = await run([piece("He gave his card number, 4111 1111 11"), piece("11 1111, thanks.")], patches);
     expect(result.blocksUpdated).toBe(1);
@@ -231,7 +231,7 @@ async function freePort(): Promise<number> {
 }
 
 describe("runOAuthCallback", () => {
-  it("answers on 127.0.0.1 and rejects an unexpected state without exchanging a code", async () => {
+  it("rejects an unexpected state without exchanging a code", async () => {
     const port = await freePort();
     const codes: string[] = [];
     const done = runOAuthCallback({
