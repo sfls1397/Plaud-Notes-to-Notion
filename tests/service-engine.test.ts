@@ -87,7 +87,6 @@ it("switches labeler on the next unit without API keys and retains an in-flight 
   const selected = await buildProfileRuntime(options);
   f.write("claude");
   expect(await selected.labeler.label({ owner: "Alex Example", plaudTitle: "fixture", summaryMarkdown: "Sam speaks", transcriptText: "Sam: hello", knownParticipants: [] })).toEqual({ participants: ["Sam"] });
-  // Back on the claude policy, Haiku runs on the Claude subscription first; no API key is required.
   expect((await buildProfileRuntime(options)).labeler.constructor.name).toBe("ClaudeLabeler");
 });
 

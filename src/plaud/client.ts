@@ -3,13 +3,10 @@ import { AuthExpiredError, isAuthExpiredError, isTransportError } from "./errors
 import type { PlaudAuthSession } from "./session.js";
 import { redactSecrets } from "../redact.js";
 
-/** One recording as listed by Plaud. Times are UTC instants. */
 export interface PlaudFileListing {
   id: string;
   name: string;
-  /** When the file landed in Plaud (upload/sync). Drives the ingest watermark. */
   createdAt: Date | null;
-  /** When recording started. Becomes Notion `Recorded`. */
   startAt: Date | null;
   durationMs: number | null;
 }
@@ -21,9 +18,7 @@ export interface PlaudSegment {
 }
 
 export interface PlaudRecording extends PlaudFileListing {
-  /** Plaud's auto summary markdown (`auto_sum_note`), or null while it is still generating. */
   summaryMarkdown: string | null;
-  /** Raw transcript segments (`transaction` block), empty while still generating. */
   segments: PlaudSegment[];
 }
 
@@ -53,11 +48,6 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
-/**
- * Plaud's third-party API returns naive ISO strings that are UTC
- * (e.g. start_at 2026-09-25T20:00:25 for a 3:00 PM CDT call); epoch seconds or
- * milliseconds are accepted too.
- */
 export function parsePlaudTime(value: unknown): Date | null {
   const n = asNumber(value);
   if (n !== null) {
@@ -224,7 +214,6 @@ export class HttpPlaudClient implements PlaudClient {
     return link ? fetchHttpsBlock(link, this.fetchImpl) : "";
   }
 
-  /** The Summary tab (`auto_sum_note`) — what the Zap's "Summary" field carried. */
   private async autoSummary(record: Record<string, unknown>): Promise<string | null> {
     const notes = Array.isArray(record.note_list) ? (record.note_list as Record<string, unknown>[]) : [];
     const note = notes.find((n) => n && n.data_type === "auto_sum_note");

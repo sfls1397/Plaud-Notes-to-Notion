@@ -1,11 +1,3 @@
-/**
- * Social Security number redaction for Plaud summaries and transcripts.
- *
- * Runs on raw Plaud text before anything leaves the Mini (OpenAI or Notion).
- * Handles written digits ("0000", "000-00-0000") and spoken digits
- * ("zero zero two three", "double oh two three"), including answers that land
- * in the next speaker's utterance after "last four of your social?".
- */
 
 export const SSN_REPLACEMENT = "[SSN redacted]";
 
@@ -26,20 +18,13 @@ export const DIGIT_WORDS: Record<string, string> = {
 const WORD = "(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)";
 const TOKEN = `(?:\\d+|(?:double|triple)[ -]${WORD}|${WORD})`;
 const SEP = "[ \\t,.\\-\\u2013\\u2014/]*";
-/** A run of written or spoken digits on one line. */
 const NUMBER_RUN = new RegExp(`(?<![\\w])${TOKEN}(?:${SEP}${TOKEN})*(?![\\w])`, "gi");
 
-/**
- * Strong triggers name the SSN outright; weak triggers ("social", "last four")
- * need a following 4- or 9-digit number and skip year-shaped values.
- */
 const STRONG_TRIGGER = /\b(?:social[ -]security(?:[ -](?:number|no\.?|#))?|s\.?\s?s\.?\s?n\.?|last\s+(?:four|4)(?:\s+digits)?\s+of\s+(?:(?:my|your|his|her|the)\s+)?(?:social|ss|ssn))\b/gi;
 const WEAK_TRIGGER = /\b(?:social(?!\s+(?:media|work|worker|workers|club|event|events|network|networks|skills|life|anxiety|studies|circle|hour|security))|last\s+(?:four|4)(?![^.?!\n]{0,40}\bcard\b)(?:\s+digits)?)\b/gi;
 
-/** Lookahead window after a trigger, long enough to cross into the next utterance. */
 const WINDOW_CHARS = 320;
 
-/** Plaud transcript header lines (`Speaker 1 00:01:05`) and bare timestamps are never SSNs. */
 const PROTECTED = /^[^\n]*\b\d{1,2}:\d{2}:\d{2}[ \t]*$|\b\d{1,2}:\d{2}(?::\d{2})?\b/gm;
 
 export interface SsnRedaction {
@@ -107,7 +92,6 @@ export function looksLikeYear(digits: string): boolean {
 }
 
 const MONTH = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
-/** "January 1st, 1990", "August 10, 1984", "born in 1984", "10/08/1984" — a year inside a date, not an SSN. */
 const DATE_BEFORE = new RegExp(
   `(?:\\b${MONTH}\\.?\\s+\\w{1,9}(?:st|nd|rd|th)?,?\\s*|\\b(?:born|birth|birthday|year|dob)\\b[^.?!\\n]{0,30}|\\d{1,2}[/-]\\d{1,2}[/-])$`,
   "i"
@@ -127,7 +111,6 @@ function triggerEnds(text: string, re: RegExp): number[] {
   return ends;
 }
 
-/** Digits of every SSN-shaped value the triggers point at, across all given texts. */
 export function findSsnDigits(texts: string[]): Set<string> {
   const found = new Set<string>();
   for (const text of texts) {
@@ -153,7 +136,6 @@ export function findSsnDigits(texts: string[]): Set<string> {
     scan(triggerEnds(text, STRONG_TRIGGER), true);
     scan(triggerEnds(text, WEAK_TRIGGER), false);
   }
-  // A full SSN also exposes its last four.
   for (const d of [...found]) {
     if (d.length === 9) {
       found.add(d.slice(5));
@@ -162,7 +144,6 @@ export function findSsnDigits(texts: string[]): Set<string> {
   return found;
 }
 
-/** Replace every number run whose digits match a found SSN value (or contain a full one). */
 export function redactDigits(text: string, ssnDigits: Set<string>): SsnRedaction {
   if (ssnDigits.size === 0) {
     return { text, count: 0 };
@@ -183,10 +164,6 @@ export function redactDigits(text: string, ssnDigits: Set<string>): SsnRedaction
   return { text: out, count: runs.length };
 }
 
-/**
- * Redact SSNs across every text of one recording. Values found in one text
- * (e.g. the transcript) are also removed from the others (e.g. the summary).
- */
 export function redactSsnAcross<T extends Record<string, string>>(texts: T): { texts: T; count: number } {
   const found = findSsnDigits(Object.values(texts));
   let count = 0;

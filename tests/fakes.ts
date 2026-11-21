@@ -48,7 +48,6 @@ return {};
 export class FakeNotion implements NotionStore {
 rows: Array<NotionRow & { body: string; inTrash?: boolean }> = [];
 trashCalls: Array<{ id: string; inTrash: boolean }> = [];
-/** Page ids that 404 on direct fetch (permanently deleted or no access). */
 gone = new Set<string>();
 private liveRows() {
 return this.rows.filter((r) => !r.inTrash && !this.gone.has(r.id));
@@ -106,7 +105,6 @@ async rowsRecordedSince(sinceIso: string): Promise<NotionRow[]> {
 return this.liveRows().filter((r) => r.recorded && r.recorded >= sinceIso);
 }
 
-/** Every lookup the code made: "id <pageId>" or "minute <iso>". */
 lookups: string[] = [];
 
 async rowById(pageId: string): Promise<NotionRow | null> {

@@ -13,18 +13,12 @@ import type { SecretStore } from "../secrets.js";
 export interface PlaudAuthSession {
   endpoints: OAuthEndpoints;
   getAccessToken(): Promise<string | null>;
-  /** Force a refresh (after a 401). */
   refresh(): Promise<string>;
   save(tokenSet: PlaudTokenSet): Promise<void>;
   clear(): Promise<void>;
   peek(): PlaudTokenSet | null;
 }
 
-/**
- * One Plaud sign-in stored in Keychain under a profile-specific account.
- * Before refreshing, re-reads Keychain: if another process (daemon vs a manual
- * CLI run) already rotated the refresh token, use that instead of burning ours.
- */
 export async function createAuthSession(options: {
   store: SecretStore;
   account: string;

@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * npm bin entry. Always invokes main — do not rely on dist/cli.js detecting a
- * symlinked argv[1] (that check silently exited 0 on the Mini for EdgeCore).
- */
 import { main } from "../dist/cli.js";
 
 main()

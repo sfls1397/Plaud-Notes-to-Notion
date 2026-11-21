@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.11
+
+- Remove every code comment (the repository's comment ban, dev process step 4). Each reason a comment carried now lives in a test name, README.md or docs/GUARDS.md. No behavior change: the compiled code is the same with comments dropped.
+
 ## 1.2.10
 
 - While the Claude subscription is at a usage limit that nothing answers (no Anthropic key, or a session/5-hour limit), the first limit holds every label for 15 minutes (the same clock as the API hold) without starting Claude Code, and ends that poll cycle: one `claude -p` run per 15 minutes and one "waits for it" log line per poll cycle, instead of a run and a log line per waiting note every 30 seconds. The notes stay pending and spend no labeling attempt.

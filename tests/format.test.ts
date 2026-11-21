@@ -89,7 +89,7 @@ describe("cleanParticipants / meetingTitle", () => {
       "Smith John"
     ]);
   });
-  it("is Plaud's title with only the leading date removed", () => {
+  it("is Plaud's title with only the leading date removed (Alex Example, 2026-09-26)", () => {
     expect(meetingTitle("09-25 Casual Chat: Scheduling a Meet-Up with Alex Example")).toBe("Casual Chat: Scheduling a Meet-Up with Alex Example");
     expect(meetingTitle("Example Mentoring at Example Company")).toBe("Example Mentoring at Example Company");
     expect(meetingTitle("T1U2 CGM")).toBe("T1U2 CGM");

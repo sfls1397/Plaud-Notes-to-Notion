@@ -8,30 +8,13 @@ import {
 } from "./constants.js";
 import { getConfigPath, readJson, writeJsonAtomic } from "./paths.js";
 
-/**
- * One Plaud account → one Plaud Notes database. Alex Example and Morgan Example are identical
- * except for these fields; everything else (pipeline, prompt, schedule) is shared.
- */
 export interface ProfileConfig {
-  /** Off = never polled or synced. */
   enabled: boolean;
-  /** Recorder owner. Never listed in Participants; named in the labeling prompt. */
   owner: string;
-  /** Plaud Notes data source id (collection://…) in that person's Notion. */
   notionDataSourceId: string;
-  /**
-   * Only recordings uploaded to Plaud at/after this instant are ingested.
-   * Set at cutover so recordings the Zap already wrote are not re-processed.
-   */
   startAfter: string;
-  /** Poll Plaud and write new Summary/Transcript rows. */
   ingest: boolean;
-  /** Run the 5-minute Summary→Transcript alignment for this profile. */
   syncTranscripts: boolean;
-  /**
-   * Keychain profile whose Plaud/Notion secrets this profile uses (default: itself).
-   * Lets a test profile share Alex Example's sign-in while writing to a test database.
-   */
   credentials: string;
 }
 

@@ -16,7 +16,6 @@ export interface LabelInput {
   plaudTitle: string;
   summaryMarkdown: string;
   transcriptText: string;
-  /** Participant options already in the Notion database (canonical spellings). */
   knownParticipants: string[];
 }
 
@@ -24,9 +23,7 @@ export class LlmError extends Error {
   constructor(
     message: string,
     readonly transient: boolean,
-    /** The Claude subscription is at a limit: wait for it, never count it as a failed attempt. */
     readonly usageLimit = false,
-    /** That limit is the plan's own usage limit: the only one ClaudeLabeler answers with the Claude API. */
     readonly planLimit = false
   ) {
     super(message);
@@ -43,12 +40,6 @@ const SCHEMA = {
   }
 } as const;
 
-/**
- * Replaces the Zap's "Extract meeting details" step for Participants (the
- * Meeting title is Plaud's own, minus its date). Same participant rules, plus:
- * the transcript (names often only appear there), the database's existing
- * participant spellings, and a strict JSON schema.
- */
 export function buildLabelPrompt(input: LabelInput): string {
   const owner = input.owner;
   const known = input.knownParticipants.filter((n) => n.toLowerCase() !== owner.toLowerCase());
@@ -116,7 +107,6 @@ export function solLabeler(env: NodeJS.ProcessEnv = process.env): Labeler {
   };
 }
 
-/** OpenAI Responses API — GPT-6 Luna at high reasoning effort by default (same labels as max on a 9-recording test, ~3.5× fewer output tokens). */
 export class OpenAiLabeler implements Labeler {
   constructor(
     private readonly options: {
@@ -137,7 +127,6 @@ export class OpenAiLabeler implements Labeler {
         headers: { Authorization: `Bearer ${this.options.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: this.options.model,
-          // Don't let OpenAI keep the request/response (default is to store it).
           store: false,
           reasoning: { effort: this.options.effort },
           input: buildLabelPrompt(input),
@@ -167,12 +156,6 @@ export class OpenAiLabeler implements Labeler {
   }
 }
 
-/**
- * Claude (Haiku by default) on the Claude subscription through headless Claude
- * Code, never an Anthropic API key (Peter, 11:08 PM CT Nov 17 2026). Same prompt
- * and JSON schema as before; Claude Code's own structured output returns it.
- * ClaudeLabeler falls back to AnthropicLabeler only on the subscription's usage limit.
- */
 export class ClaudeSubscriptionLabeler implements Labeler {
   constructor(
     private readonly options: {
@@ -197,7 +180,6 @@ export class ClaudeSubscriptionLabeler implements Labeler {
       );
     } catch (error) {
       if (error instanceof ClaudeSubscriptionError) {
-        // A refused run (API key in use, wrong model) never gets better by retrying; a limit, exit or timeout can.
         const permanent = /reply refused|Only Claude Haiku/.test(error.message);
         throw new LlmError(error.message, !permanent, error.usageLimit, error.planLimit);
       }
@@ -207,11 +189,6 @@ export class ClaudeSubscriptionLabeler implements Labeler {
   }
 }
 
-/**
- * Anthropic Messages API — Claude Haiku by default. Structured output via a
- * `plaud_labels` tool call whose input schema is the same SCHEMA. High effort
- * with automatic tool choice lets Haiku think before producing the labels.
- */
 export class AnthropicLabeler implements Labeler {
   constructor(
     private readonly options: {
@@ -247,7 +224,6 @@ export class AnthropicLabeler implements Labeler {
       throw new LlmError(`Anthropic request failed (${err instanceof Error ? err.name : "network"})`, true);
     }
     if (!res.ok) {
-      // 529 = overloaded; covered by >= 500.
       const transient = res.status === 429 || res.status >= 500 || res.status === 408;
       throw new LlmError(`Anthropic HTTP ${res.status}`, transient);
     }
@@ -260,27 +236,15 @@ export class AnthropicLabeler implements Labeler {
   }
 }
 
-/** After a subscription limit, labels go straight to the Claude API for this long, then the subscription is tried again (as Toolbox claude-side does). */
 export const CLAUDE_API_HOLD_MS = 15 * 60 * 1000;
 let claudeApiUntil = 0;
-/**
- * After a subscription limit the Claude API does not answer (no key, or a session/5-hour limit), labels are not
- * attempted for this long (the same 15-minute clock): each attempt is a `claude -p` spawn that can only fail again.
- */
 let claudeWaitUntil = 0;
 
-/** Test hook: forget a fallback hold left by an earlier label in this process. */
 export function resetClaudeApiHold(): void {
   claudeApiUntil = 0;
   claudeWaitUntil = 0;
 }
 
-/**
- * Claude subscription first; the Claude API (same model) only while the subscription is at its usage
- * limit (Peter, 11:58 PM CT Nov 17 2026: services outside T3 fall back to the Claude API when the
- * subscription is up, then go back to it). With no Anthropic key, the limit reaches ingest, which keeps
- * the note pending without spending an attempt.
- */
 export class ClaudeLabeler implements Labeler {
   private readonly subscription: ClaudeSubscriptionLabeler;
   private readonly api: AnthropicLabeler | null;
@@ -306,7 +270,6 @@ export class ClaudeLabeler implements Labeler {
       return await this.subscription.label(input);
     } catch (error) {
       if (error instanceof LlmError && error.usageLimit && !(this.api && error.planLimit)) {
-        // Nothing answers this limit: wait out the hold instead of spawning `claude -p` again every poll.
         claudeWaitUntil = this.now() + CLAUDE_API_HOLD_MS;
         this.log("Claude subscription is at a usage limit: no labels are attempted for the next 15 minutes, then the subscription again.");
       }
@@ -320,7 +283,6 @@ export class ClaudeLabeler implements Labeler {
   }
 }
 
-/** Picks the provider from the model name: `claude-*` → the Claude subscription (the Claude API only on its limit), anything else → OpenAI. */
 export function createLabeler(options: {
   model: string;
   effort: string;

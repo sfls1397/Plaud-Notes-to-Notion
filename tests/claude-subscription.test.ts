@@ -23,7 +23,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("the subscription transport", () => {
-  it("never names the Anthropic API or reads a key", () => {
+  it("never names the Anthropic API or reads a key (Peter: Haiku labels run on the Claude subscription, never an Anthropic key; 11:08 PM CT Nov 17 2026; T3 Code chat T3-Agent Team Coordinator)", () => {
     const text = fs.readFileSync(path.join(root, "src", "claude-subscription.ts"), "utf8");
     expect(text).not.toMatch(/api\.anthropic\.com|x-api-key|anthropic-version|\/v1\/messages|env\.ANTHROPIC_API_KEY|fetch\(/);
   });
@@ -166,8 +166,6 @@ process.stdin.on("end", () => {
     await expect(labeler.label(input)).rejects.toMatchObject({ name: "LlmError", transient: true, usageLimit: true });
   });
 
-  // Peter, 11:58 PM CT Nov 17 2026: services outside T3 use the Claude subscription first and the Claude API only
-  // while the subscription is at its usage limit, then go back to it.
   function apiStub() {
     const seen: Array<{ url: string; model: string; key: boolean }> = [];
     const fetchImpl = (async (url: string, init?: RequestInit) => {
@@ -178,7 +176,7 @@ process.stdin.on("end", () => {
     return { seen, fetchImpl };
   }
 
-  it("never calls the Claude API while the subscription answers, even with an Anthropic key", async () => {
+  it("never calls the Claude API while the subscription answers, even with an Anthropic key (Peter: services outside T3 use the subscription first and the Claude API only at its usage limit; 11:58 PM CT Nov 17 2026; T3 Code chat T3-Agent Team Coordinator)", async () => {
     const fake = fakeClaude({ participants: ["Dana - Acme"] });
     const api = apiStub();
     const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com",
@@ -257,7 +255,7 @@ process.stdin.on("end", () => {
     expect(fs.existsSync(failing.record)).toBe(true);
   });
 
-  it("a server throttle or bare 429 is a plain failure and a session limit only waits: neither falls back to the Claude API", async () => {
+  it("a server throttle or bare 429 is a plain failure and a session limit only waits: neither falls back to the Claude API (Peter: never fall back to the API on a one-time failure; 8:53 AM CT Nov 11 2026; T3 Code chat Figure out why both Claude providers don't work)", async () => {
     const api = apiStub();
     for (const [words, expected] of [
       ["API Error: 429 Server is temporarily limiting requests (not your usage limit)", { usageLimit: false, planLimit: false }],
@@ -265,7 +263,7 @@ process.stdin.on("end", () => {
       ["Session limit reached ∙ resets 3am", { usageLimit: true, planLimit: false }],
       ["5-hour limit reached ∙ resets 3am", { usageLimit: true, planLimit: false }]
     ] as const) {
-      resetClaudeApiHold(); // each case is its own first limit, not a label held by the one before
+      resetClaudeApiHold();
       const fake = fakeClaude({ limit: words });
       const labeler = createLabeler({ model: HAIKU, effort: "high", openaiBaseUrl: "https://example.invalid", anthropicBaseUrl: "https://api.anthropic.com",
         anthropicKey: "fixture-not-a-key", fetchImpl: api.fetchImpl, env: { HOME: os.homedir(), PATH: "/usr/bin:/bin", CLAUDE_SUBSCRIPTION_BIN: fake.bin } });

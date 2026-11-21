@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findSsnDigits, redactSsnAcross, spokenDigits, SSN_REPLACEMENT } from "../src/ssn.js";
 
-// All numbers here are synthetic.
 const R = SSN_REPLACEMENT;
 
 describe("spokenDigits", () => {

@@ -39,7 +39,6 @@ describe("runSync", () => {
     expect(first.mode).toBe("full");
     expect(notion.rows.find((r) => r.id === "t1")?.participants).toEqual(["Front Desk"]);
 
-    // Alex Example renames the Summary later.
     const s1 = notion.rows.find((r) => r.id === "s1")!;
     s1.title = "Form Status Follow-Up";
     s1.lastEdited = "2026-09-25T21:03:00.000Z";
@@ -78,7 +77,7 @@ describe("runDeletionSync", () => {
   it("deleting the Summary deletes the Transcript", async () => {
     const notion = pair();
     const state = emptyState();
-    expect((await runDeletionSync(base(notion, state))).tracked).toBe(1); // first pass only learns the pair
+    expect((await runDeletionSync(base(notion, state))).tracked).toBe(1);
     trash(notion, "s1");
     const r = await runDeletionSync(base(notion, state));
     expect(r.trashed).toEqual([{ pageId: "t1", side: "transcript", minute: "2026-09-25T20:00:00.000Z" }]);
@@ -101,9 +100,9 @@ describe("runDeletionSync", () => {
       const state = emptyState();
       await runDeletionSync(base(notion, state));
       trash(notion, deleted);
-      await runDeletionSync(base(notion, state)); // partner auto-trashed
+      await runDeletionSync(base(notion, state));
       expect(inTrash(notion, "s1") && inTrash(notion, "t1")).toBe(true);
-      trash(notion, restored, false); // user restores one side from the trash
+      trash(notion, restored, false);
       const r = await runDeletionSync(base(notion, state));
       expect(r.restored.map((x) => x.pageId)).toEqual([partner]);
       expect(inTrash(notion, "s1") || inTrash(notion, "t1")).toBe(false);
@@ -117,7 +116,7 @@ describe("runDeletionSync", () => {
     trash(notion, "s1");
     trash(notion, "t1");
     const r = await runDeletionSync(base(notion, state));
-    expect(r.trashed).toEqual([]); // nothing left to trash
+    expect(r.trashed).toEqual([]);
     trash(notion, "t1", false);
     await runDeletionSync(base(notion, state));
     expect(inTrash(notion, "s1")).toBe(false);
@@ -133,7 +132,6 @@ describe("runDeletionSync", () => {
       const r = await runDeletionSync({ ...base(notion, state), log: (m: string) => logs.push(m) });
       expect(r.trashed).toEqual([]);
       expect(notion.trashCalls).toEqual([]);
-      // Kept as gone (by id, never re-made) and reported once, not every cycle.
       expect(state.pairs?.s1?.gone).toBeTruthy();
       await runDeletionSync({ ...base(notion, state), log: (m: string) => logs.push(m) });
       expect(logs.filter((l) => l.includes("no longer visible"))).toHaveLength(1);
