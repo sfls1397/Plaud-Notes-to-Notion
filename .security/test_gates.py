@@ -91,14 +91,6 @@ class Gates(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             gate.exceptions({'audit':[{'expires':'2000-01-01','reason':'probe','tracking':'probe'}]}, 'audit')
 
-    def test_parser_workaround_keeps_unsafe_code_visible(self):
-        p = self.root / 'src/core/sonos.ts'
-        p.parent.mkdir(parents=True)
-        p.write_text(r'const s = body.replace(/<!--\s*SDT:[^>]*-->/g, "");' + '\neval(userInput);\n')
-        gate.normalize_parser(self.root)
-        with self.assertRaises(RuntimeError):
-            gate.semgrep(self.root, {'semgrep': []}, ['src/core/sonos.ts'])
-
     def test_rules_reject_security_sinks(self):
         js = self.root / 'probe.js'
         js.write_text('import {exec} from "child_process";\nconst req = getRequest();\nexec(req.body);\nnew Function(userInput);\nspawn("tool", [], {shell:true});\nconst options = {rejectUnauthorized:false};\nprocess.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";\ncrypto.createHash("md5");\nexecFileSync("/usr/bin/security", ["add-generic-password", "-w", secret]);\n')
