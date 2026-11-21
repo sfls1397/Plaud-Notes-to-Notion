@@ -7,7 +7,6 @@ export interface Logger {
   verbose: boolean;
   info(msg: string): void;
   warn(msg: string): void;
-  /** stderr gets `msg`. The Library/Logs file gets `fileLine` when provided (keep HTTP/network cause there). */
   error(msg: string, fileLine?: string): void;
 }
 
@@ -28,7 +27,6 @@ export function createLogger(options: {
       ensureDir(path.dirname(logFile));
       fs.appendFileSync(logFile, `${new Date().toISOString()} ${redactSecrets(line)}\n`);
     } catch {
-      /* logging must not crash the run */
     }
   }
 

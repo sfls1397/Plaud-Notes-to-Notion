@@ -1,13 +1,3 @@
-/**
- * Credit / debit card redaction for Plaud summaries and transcripts.
- *
- * Runs on raw Plaud text before anything leaves the Mini, next to SSN redaction.
- * Removes full card numbers (written or spoken, also when the transcription
- * dropped or added a digit), partial numbers ("ending in 0000", "Visa that
- * begins with 4111", "last four of the card"), the security code (CVV / CVC)
- * and the expiration date. Full numbers and 4-digit partials found anywhere in
- * a recording are removed everywhere in it.
- */
 
 import { DIGIT_WORDS, isYearInDate, protectedRanges } from "./ssn.js";
 
@@ -21,7 +11,6 @@ const TEEN = "(?:ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|e
 const TENS = "(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)";
 const TOKEN = `(?:\\d+|(?:double|triple)[ -]${UNIT}|${TENS}(?:[ -]${UNIT_NZ})?|${TEEN}|${UNIT})`;
 const SEP = "[ \\t,.\\-\\u2013\\u2014/]*";
-/** A run of written or spoken digits on one line ("4111 1111", "forty one eleven", "double four"). */
 const NUMBER_RUN = new RegExp(`(?<![\\w])${TOKEN}(?:${SEP}${TOKEN})*(?![\\w])`, "gi");
 
 const TEEN_VALUES: Record<string, string> = {
@@ -47,23 +36,17 @@ const TENS_VALUES: Record<string, string> = {
   ninety: "9"
 };
 
-/** Words that put a number in card territory. */
 const CARD_WORD = /\b(?:card|visa|master\s?card|amex|american\s+express|discover|debit|credit)\b/gi;
-/** "ending in", "ends with", "begins in", "starting with" — a partial number follows. */
 const PARTIAL_TRIGGER = /\b(?:end(?:s|ing|ed)?|begin(?:s|ning)?|start(?:s|ing)?)(?:\s+(?:in|with))?\b/gi;
-/** "last four (digits) of the/your card" — the answer may land in the next utterance. */
 const LAST_FOUR_TRIGGER = /\blast\s+(?:four|4)(?:\s+(?:digits|numbers))?(?=[^.?!\n]{0,40}\bcard\b)/gi;
-/** A 4-digit run naming a card: "the 0000 card", "my 0000 Visa". */
 const CARD_AFTER = /^[\s`'"“”‘’)]*(?:(?:visa|master\s?card|amex|credit|debit|signature|rewards)\s+)*(?:card|visa|master\s?card|amex)\b/i;
 const CODE_TRIGGER = /\b(?:cvv2?|cvc2?|cid|security\s+code|three[- ]digit\s+code|(?:code|digits|numbers)\s+on\s+the\s+back)\b/gi;
 const EXPIRY_TRIGGER = /\b(?:expiration(?:\s+date)?|expiry(?:\s+date)?|exp\.?(?:\s+date)?|expires?|expir(?:ed|ing)|valid\s+(?:thru|through))(?![\w])/gi;
 
 const MONTH = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
-/** "30 days", "500 dollars", "5 percent" — an amount, not part of a card. */
 const UNIT_AFTER = /^\s*(?:%|percent|dollars?|bucks|cents?|days?|weeks?|months?|years?|hours?|minutes?)\b/i;
 const ORDINAL_AFTER = /^(?:st|nd|rd|th)\b|^[ \t-]*(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|\w+teenth|\w+tieth)\b/i;
 
-/** Lookahead window after a trigger, long enough to cross into the next utterance. */
 const WINDOW_CHARS = 320;
 const CONTEXT_BEFORE = 200;
 const CONTEXT_AFTER = 80;
@@ -80,7 +63,6 @@ interface Hit {
   start: number;
   end: number;
   kind: Kind;
-  /** Value to remove everywhere in the recording (full numbers and 4-digit partials). */
   spread?: string;
 }
 
@@ -151,7 +133,6 @@ function hasCardContext(text: string, start: number, end: number): boolean {
   return new RegExp(CARD_WORD.source, "i").test(text.slice(Math.max(0, start - CONTEXT_BEFORE), end + CONTEXT_AFTER));
 }
 
-/** Written card shapes: 4-4-4-4 (or a truncated last group) and Amex 4-6-5. */
 function looksLikeCardShape(raw: string): boolean {
   return /^\d{4}([ -])\d{4}\1\d{4}(?:\1\d{1,7})?$/.test(raw) || /^\d{4}([ -])\d{6}\1\d{5}$/.test(raw);
 }
@@ -168,7 +149,6 @@ function numberHit(run: Run): Hit {
   return { start: run.start, end: run.end, kind: "number", spread: run.digits };
 }
 
-/** A month/year expiration right after the trigger; never a full date with a day. */
 function expiryAfter(text: string, at: number, runs: Run[]): Hit | undefined {
   const tail = text.slice(at, at + 120);
   const candidates: Hit[] = [];
@@ -204,7 +184,6 @@ function expiryAfter(text: string, at: number, runs: Run[]): Hit | undefined {
   return candidates.sort((a, b) => a.start - b.start)[0];
 }
 
-/** Every card detail this one text points at by itself. */
 function scan(text: string): Hit[] {
   const runs = numberRuns(text);
   const hits: Hit[] = [];
@@ -235,7 +214,6 @@ function scan(text: string): Hit[] {
     hits.push({ start: run.start, end: run.end, kind: "number", spread: run.digits.length === 4 && !isYearInDate(text, run) ? run.digits : undefined });
   }
 
-  // "this card is the 0000 card", "my 0000 Visa"
   for (const run of runs) {
     if (run.digits.length === 4 && !isYearInDate(text, run) && !isAmount(text, run) && CARD_AFTER.test(text.slice(run.end, run.end + 30))) {
       hits.push(numberHit(run));
@@ -269,7 +247,6 @@ function scan(text: string): Hit[] {
   return hits;
 }
 
-/** Card values to remove everywhere in a recording: full numbers, their last four, and 4-digit partials. */
 export function findCardDigits(texts: string[]): Set<string> {
   const found = new Set<string>();
   for (const text of texts) {
@@ -285,7 +262,6 @@ export function findCardDigits(texts: string[]): Set<string> {
   return found;
 }
 
-/** Replace every card detail in this text, plus any number run matching a value found elsewhere in the recording. */
 export function redactCards(text: string, cardValues: Set<string>): { text: string; count: number } {
   const hits = scan(text);
   if (cardValues.size) {
@@ -317,10 +293,6 @@ export function redactCards(text: string, cardValues: Set<string>): { text: stri
   return { text: out, count };
 }
 
-/**
- * Redact card details across every text of one recording. Values found in one
- * text (e.g. the transcript) are also removed from the others (e.g. the summary).
- */
 export function redactCardsAcross<T extends Record<string, string>>(texts: T): { texts: T; count: number } {
   const found = findCardDigits(Object.values(texts));
   let count = 0;

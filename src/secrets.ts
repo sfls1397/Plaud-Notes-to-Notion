@@ -17,7 +17,6 @@ function stripSecurityPassword(stdout: string): string {
   return stdout.replace(/\n$/, "");
 }
 
-/** Quote for `security -i` so the secret is on stdin, not `ps` argv. */
 export function quoteSecurityArg(value: string): string {
   if (!value || /[\r\n\0]/.test(value)) throw new Error(KEYCHAIN_WRITE_FAILED);
   return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
@@ -51,7 +50,6 @@ export async function defaultSecurityRun(
       return;
     }
     child.stdin.on("error", () => {
-      /* EPIPE: close/error settles the promise */
     });
     if (stdin !== undefined) {
       child.stdin.write(stdin);
@@ -60,10 +58,6 @@ export async function defaultSecurityRun(
   });
 }
 
-/**
- * Mini: `security -i` with the password on stdin (not argv / `ps`).
- * `-U` updates an existing item. GUI Terminal.app required — non-GUI write fails.
- */
 export async function writeKeychainPassword(options: {
   service: string;
   account: string;
@@ -78,7 +72,6 @@ export async function writeKeychainPassword(options: {
   try {
     await run(securityBin, ["-i"], line);
   } catch {
-    // Preserve the old credential on failure; never delete it to retry an unproven write.
     throw new Error(KEYCHAIN_WRITE_FAILED);
   }
   let readBack: string;
@@ -127,7 +120,6 @@ export class MemorySecretStore implements SecretStore {
   }
 }
 
-/** File-backed store for tests (`PLAUD_NOTES_HOME`) and Linux fallback. Mini uses Keychain. */
 export class FileSecretStore implements SecretStore {
   constructor(private readonly dir: string) {}
 
@@ -220,24 +212,16 @@ export class KeychainSecretStore implements SecretStore {
         account
       ]);
     } catch {
-      /* already gone */
     }
   }
 }
 
-/** Environment variable prefix for each Keychain account kind. Plaud sessions have none on purpose. */
 const ENV_PREFIX: Readonly<Record<string, string>> = {
   notion: "NOTION_TOKEN",
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY"
 };
 
-/**
- * The environment variable that can stand in for a Keychain account, or null when the
- * account is Keychain only. `notion:peter` → NOTION_TOKEN_PETER, `anthropic` → ANTHROPIC_API_KEY,
- * `anthropic:peter` → ANTHROPIC_API_KEY_PETER. `plaud:*` sessions are refreshed and written
- * back by the service, so they always stay in the Keychain.
- */
 export function secretEnvName(account: string): string | null {
   const [kind, ...rest] = account.split(":");
   const prefix = Object.prototype.hasOwnProperty.call(ENV_PREFIX, kind) ? ENV_PREFIX[kind] : undefined;
@@ -247,11 +231,6 @@ export function secretEnvName(account: string): string | null {
   return profile ? `${prefix}_${profile}` : null;
 }
 
-/**
- * Environment first, store (Keychain) second: the variable wins when it is set and not
- * blank, so a service started through infisical-run takes its injected value, and an
- * unchanged LaunchAgent keeps reading the Keychain exactly as before.
- */
 export async function readSecret(store: SecretStore, account: string, env: NodeJS.ProcessEnv): Promise<string | null> {
   const name = secretEnvName(account);
   const fromEnv = name ? env[name]?.trim() : undefined;

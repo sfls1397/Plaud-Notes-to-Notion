@@ -47,7 +47,6 @@ async function closeServers(servers: ReturnType<typeof createServer>[]): Promise
           try {
             server.closeAllConnections?.();
           } catch {
-            /* ignore */
           }
           server.close(() => resolve());
         })
@@ -85,10 +84,6 @@ export interface RunOAuthCallbackOptions {
   postSuccessDelayMs?: number;
 }
 
-/**
- * Loopback OAuth callback on localhost:8199 (Plaud's registered redirect).
- * Binds 127.0.0.1 and ::1 only. Rejects unexpected `state` without exchanging a code.
- */
 export function runOAuthCallback(options: RunOAuthCallbackOptions): Promise<OAuthCallbackResult> {
   const port = options.port ?? OAUTH_CALLBACK_PORT;
   const callbackPath = options.path ?? OAUTH_CALLBACK_PATH;

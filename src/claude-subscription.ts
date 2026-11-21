@@ -3,41 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-/**
- * Claude Haiku through the Claude subscription: headless Claude Code (`claude -p`)
- * signed in to the subscription, never an Anthropic API key (Peter, 11:08 PM CT
- * Nov 17 2026). The caller may fall back to the Claude API only when this reports
- * the subscription's usage limit (Peter, 11:58 PM CT Nov 17 2026).
- *
- * Three guards keep a key out of every call:
- * 1. The child gets an allowlisted environment, so no ANTHROPIC_API_KEY,
- *    ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, CLAUDE_CODE_OAUTH_TOKEN or cloud
- *    provider switch reaches it, whatever the parent was handed.
- * 2. `--setting-sources ""` skips every settings file, so no apiKeyHelper or env
- *    block from a settings file can supply one.
- * 3. The reply is accepted only when Claude Code's own init event reports
- *    `apiKeySource: "none"` (the subscription sign-in) and every model it used is Haiku.
- */
-
 export const SUBSCRIPTION_ENV_KEEP = ["HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "TZ"] as const;
 const HAIKU = /^claude-haiku-\d[a-z0-9.-]*$/;
-/** Claude Code saying a throttle is not the plan's limit ("Server is temporarily limiting requests (not your usage limit)"). */
 const NOT_LIMIT = /not your usage limit|temporarily limiting requests/i;
-/**
- * The plan's own usage limit, worded as Toolbox claude-side's USAGE_LIMIT (lib/claude_side.py): only this may move a
- * call to the Claude API. A bare 429, "rate limit" or "too many requests" is a one-time failure, never a fallback
- * (Peter: never fall back to the API on a one-time failure; 8:53 AM CT Nov 11 2026).
- */
 const PLAN_LIMIT = /hit your (?:(?:weekly|opus|sonnet|fable|haiku|usage credit|monthly spend)\s+)?limit\b|reached your (?:weekly |monthly )?usage limit|weekly limit|usage[_ ]limit|out of (?:extra )?usage\b|out of usage credits/i;
-/** A short-window limit (5-hour, session): the call waits for it, but it never moves to the Claude API (as claude-side). */
 const WINDOW_LIMIT = /\b\d+-hour limit\b|\bsession limit\b/i;
 const OUTPUT_BOUND = 8 * 1024 * 1024;
 
 export class ClaudeSubscriptionError extends Error {
-  /**
-   * usageLimit: the subscription is at a limit, so the work waits for it (no attempt spent).
-   * planLimit: that limit is the plan's own usage limit, the only one a caller may answer with the Claude API.
-   */
   constructor(message: string, readonly usageLimit = false, readonly planLimit = false) {
     super(message);
     this.name = "ClaudeSubscriptionError";
@@ -58,14 +31,11 @@ export function subscriptionEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Pr
   for (const name of SUBSCRIPTION_ENV_KEEP) {
     if (env[name] !== undefined) out[name] = env[name];
   }
-  // Claude Code finds its subscription sign-in in the login Keychain by USER; a LaunchAgent's
-  // environment may not carry it ("Not logged in"), so take it from the OS account.
   if (!out.USER || !out.LOGNAME) {
     let account = "";
     try {
       account = os.userInfo().username;
     } catch {
-      // no account name available; Claude Code then reports "Not logged in"
     }
     if (account) {
       out.USER ||= account;
@@ -120,7 +90,6 @@ function eventsOf(stdout: string): Events {
   return found;
 }
 
-/** Classify Claude Code's own failure words: the plan's usage limit, a short-window limit, or neither. */
 export function limitOf(text: string): "plan" | "window" | null {
   if (NOT_LIMIT.test(text)) return null;
   if (PLAN_LIMIT.test(text)) return "plan";
@@ -134,7 +103,6 @@ function limitError(kind: "plan" | "window"): ClaudeSubscriptionError {
     : new ClaudeSubscriptionError("Claude subscription session limit", true, false);
 }
 
-/** The reply text (the structured JSON, encoded) from one finished `claude -p` run. Throws on anything else. */
 export function readReply(model: string, code: number | null, stdout: string, stderr: string): string {
   const { init, result } = eventsOf(stdout);
   if (result?.is_error) {
@@ -143,7 +111,6 @@ export function readReply(model: string, code: number | null, stdout: string, st
     throw new ClaudeSubscriptionError("Claude subscription call failed");
   }
   if (!result) {
-    // Like claude-side: only stderr and the last plain-text stdout line are Claude Code's own words.
     const plain = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
     const last = plain.length && !plain[plain.length - 1].startsWith("{") ? plain[plain.length - 1] : "";
     const kind = code === 0 ? null : limitOf(`${stderr}\n${last}`);
@@ -191,7 +158,6 @@ export function claudeSubscription(request: ClaudeSubscriptionRequest, env: Node
       try {
         if (child.pid) process.kill(-child.pid, signal);
       } catch {
-        // already gone
       }
     };
     const stop = (message: string) => {

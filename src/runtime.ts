@@ -53,12 +53,10 @@ export async function anthropicKey(store: SecretStore, credentials: string, env:
   return key;
 }
 
-/** The Anthropic key if one is stored: only the fallback while the Claude subscription is at its usage limit, so none is fine. */
 export async function anthropicFallbackKey(store: SecretStore, credentials: string, env: NodeJS.ProcessEnv): Promise<string | undefined> {
   return (await readSecret(store, anthropicAccount(credentials), env)) || (await readSecret(store, ANTHROPIC_ACCOUNT, env)) || undefined;
 }
 
-/** Claude Code must be runnable: Claude models run on the Claude subscription first. */
 export function requireClaudeCode(env: NodeJS.ProcessEnv): void {
   const bin = claudeBinary(env);
   try {
@@ -68,7 +66,6 @@ export function requireClaudeCode(env: NodeJS.ProcessEnv): void {
   }
 }
 
-/** The API key for the configured model's provider; SetupError naming the right `set-secret` if missing. */
 export async function llmKey(store: SecretStore, credentials: string, model: string, env: NodeJS.ProcessEnv): Promise<string> {
   return isAnthropicModel(model) ? anthropicKey(store, credentials, env) : openaiKey(store, credentials, env);
 }
@@ -112,7 +109,6 @@ export async function buildProfileRuntime(options: {
     } else {
       const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
       const claude = isAnthropicModel(llmModel);
-      // Claude: the Claude subscription first, the Anthropic key (if stored) only on its usage limit.
       if (claude) requireClaudeCode(env);
       labeler = createLabeler({
         model: llmModel,
@@ -153,7 +149,6 @@ export function updateStatus(profile: string, patch: Partial<ProfileStatus>, env
   return next;
 }
 
-/** macOS banner so an expired sign-in never fails silently. Best effort. */
 export function notifyMac(title: string, message: string): void {
   if (process.platform !== "darwin") {
     return;
@@ -166,6 +161,5 @@ export function notifyMac(title: string, message: string): void {
     });
     child.unref();
   } catch {
-    /* ignore */
   }
 }

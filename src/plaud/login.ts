@@ -31,7 +31,6 @@ export async function probeCurrentUser(options: {
   }
 }
 
-/** Plaud consumer OAuth (public client + PKCE) for one profile; tokens go to Keychain. */
 export async function runPlaudLogin(options: {
   profile: string;
   store: SecretStore;

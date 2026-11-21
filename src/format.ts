@@ -1,13 +1,5 @@
 import type { PlaudSegment } from "./plaud/client.js";
 
-/**
- * Summary cleanup ported from the Zap (steps 3–5), in the same order:
- *   3. drop the literal "PLAUD NOTE" banner
- *   4. straight double quotes → typographic quotes (the Zap turned every `"`
- *      into a closing `”`; this pairs them as “…”)
- *   5. drop Plaud image embeds (`![..](permanent/..)`), `---` dividers and blank
- *      lines, and split `> **Label:** text` into a bold label + quote.
- */
 export function cleanSummaryMarkdown(markdown: string): string {
   let t = markdown.replace(/\r\n?/g, "\n");
   t = t.split("PLAUD NOTE").join("");
@@ -21,12 +13,6 @@ export function cleanSummaryMarkdown(markdown: string): string {
   return mergeQuoteRuns(t.trim());
 }
 
-/**
- * Consecutive `>` lines are one quote in the Zap's output (one Notion quote
- * block with line breaks). Notion's markdown API makes a block per line, so
- * join them with `<br>`; list lines inside a quote become the quote's
- * children (the Zap nested them, but under the previous to-do by mistake).
- */
 export function mergeQuoteRuns(markdown: string): string {
   const lines = markdown.split("\n");
   const out: string[] = [];
@@ -53,7 +39,6 @@ export function mergeQuoteRuns(markdown: string): string {
   return out.join("\n");
 }
 
-/** Opening quote after start/space/bracket/dash, closing quote everywhere else. */
 export function smartQuotes(text: string): string {
   return text.replace(/(^|[\s(\[{—–-])"/gm, "$1“").replace(/"/g, "”");
 }
@@ -66,32 +51,21 @@ export function formatOffset(ms: number): string {
   return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
-/**
- * Transcript text exactly as the Zap wrote it (Plaud's "Markdown" transcript):
- * `Speaker 1 00:00:01` (start rounded to the second) then the utterance, one
- * line each, no merging.
- */
 export function formatTranscript(segments: PlaudSegment[]): string {
   return segments.map((s) => `${s.speaker} ${formatOffset(s.startMs)}\n${s.text}`).join("\n");
 }
 
-/** Notion `Recorded`: recording start, truncated to the minute, as a UTC instant. */
 export function recordedMinute(startAt: Date): string {
   const d = new Date(startAt.getTime());
   d.setUTCSeconds(0, 0);
   return d.toISOString();
 }
 
-/** Meeting title: Plaud's own title minus its leading `MM-DD ` date (Alex Example 2026-09-26). */
 export function meetingTitle(plaudName: string): string {
   const t = plaudName.replace(/^\d{2}-\d{2}\s+/, "").trim();
   return t || "Untitled recording";
 }
 
-/**
- * Participants as Notion multi-select options: owner and generic diarization
- * labels removed, commas stripped (Notion rejects them), duplicates dropped.
- */
 export function cleanParticipants(names: string[], owner: string): string[] {
   const ownerLc = owner.trim().toLowerCase();
   const seen = new Set<string>();

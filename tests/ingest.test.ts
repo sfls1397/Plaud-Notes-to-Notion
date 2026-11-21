@@ -36,8 +36,8 @@ describe("runIngest", () => {
     expect(s.types).toEqual(["Summary"]);
     expect(t.types).toEqual(["Transcript"]);
     for (const row of [s, t]) {
-      expect(row.title).toBe("Recording of_1"); // Plaud's "09-25 Recording of_1" minus the date
-      expect(row.participants).toEqual(["Sam"]); // owner stripped
+      expect(row.title).toBe("Recording of_1");
+      expect(row.participants).toEqual(["Sam"]);
       expect(row.recorded).toBe("2026-09-26T14:50:00.000Z");
     }
     expect(t.body).toBe("Speaker 1 00:00:00\nHello there.");
@@ -122,14 +122,13 @@ describe("runIngest", () => {
     expect(d.notion.rows.map((x) => x.types[0])).toEqual(["Summary"]);
     r = await runIngest(d);
     expect(d.notion.rows.map((x) => x.types[0])).toEqual(["Summary", "Transcript"]);
-    expect(d.labeler.calls).toHaveLength(1); // labels reused, rows match
+    expect(d.labeler.calls).toHaveLength(1);
   });
 
   it("recovers when a create secretly succeeded but state was lost (same minute+type+title)", async () => {
     const d = deps();
     d.plaud.add({ id: "of_1" });
     await runIngest(d);
-    // Simulate a crash that lost page ids but kept labels.
     const f = d.state.files.of_1;
     f.status = "pending";
     delete f.summaryPageId;
@@ -183,7 +182,6 @@ describe("runIngest", () => {
     expect(d.state.files.of_1.llmAttempts).toBe(0);
     expect(d.state.files.of_1.status).toBe("pending");
     expect(d.logs.join("\n")).toMatch(/usage limit/);
-    // Once the subscription answers again, the note is written with real labels.
     d.labeler.label = FakeLabeler.prototype.label.bind(d.labeler);
     await runIngest(d);
     expect(d.notion.rows.map((r) => r.title)).toEqual(["Budget Review With Jim", "Budget Review With Jim"]);
@@ -204,7 +202,6 @@ describe("runIngest", () => {
     expect(r.errors).toEqual([]);
     expect(d.logs.filter((line) => /usage limit/.test(line))).toHaveLength(1);
     expect(Object.values(d.state.files).every((f) => f.status === "pending" && f.llmAttempts === 0)).toBe(true);
-    // The next cycle, once the subscription answers, writes all three.
     d.labeler.label = FakeLabeler.prototype.label.bind(d.labeler);
     const next = await runIngest(d);
     expect(next.written).toHaveLength(3);
@@ -224,11 +221,11 @@ describe("runIngest", () => {
       d.plaud.add({
         id: `recent${i}`,
         startAt: new Date(Date.parse("2026-09-26T14:00:00Z") - i * 60_000),
-        createdAt: new Date("2026-09-25T10:00:00Z") // before startAfter: already handled by the Zap
+        createdAt: new Date("2026-09-25T10:00:00Z")
       });
     }
     d.plaud.add({ id: "late", startAt: new Date("2026-09-24T09:00:00Z"), createdAt: new Date("2026-09-26T14:59:00Z") });
-    expect((await runIngest(d)).written).toHaveLength(0); // page 1 only
+    expect((await runIngest(d)).written).toHaveLength(0);
     expect((await runIngest(d, { deep: true })).written.map((w) => w.id)).toEqual(["late"]);
   });
 });
@@ -243,7 +240,7 @@ describe("cutover snapshot and late summaries", () => {
     expect(d.state.files["old-no-summary"]).toMatchObject({ status: "pending", slow: true });
     expect(d.notion.rows).toHaveLength(0);
     d.plaud.recordings.get("old-no-summary")!.summaryMarkdown = "## Core Synopsis\nGenerated later.";
-    expect((await runIngest(d)).written).toHaveLength(0); // slow items wait for a deep scan
+    expect((await runIngest(d)).written).toHaveLength(0);
     expect((await runIngest(d, { deep: true })).written.map((w) => w.id)).toEqual(["old-no-summary"]);
     expect(d.notion.rows.map((r) => r.recorded)).toEqual(["2026-09-15T21:13:00.000Z", "2026-09-15T21:13:00.000Z"]);
   });

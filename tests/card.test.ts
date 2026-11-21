@@ -10,7 +10,6 @@ import {
 } from "../src/card.js";
 import { redactSsnAcross, SSN_REPLACEMENT } from "../src/ssn.js";
 
-// All numbers here are synthetic (4111… is the public Visa test number).
 const N = CARD_NUMBER_REPLACEMENT;
 const C = CARD_CODE_REPLACEMENT;
 const X = CARD_EXPIRY_REPLACEMENT;

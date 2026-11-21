@@ -39,9 +39,7 @@ export interface NotionStore {
   summariesEditedSince(sinceIso: string): Promise<NotionRow[]>;
   rowsRecordedSince(sinceIso: string): Promise<NotionRow[]>;
   updateRow(pageId: string, patch: { title?: string; participants?: string[] }): Promise<void>;
-  /** One row by page id; null when it is in the trash, archived, or answers 404. */
   rowById(pageId: string): Promise<NotionRow | null>;
-  /** Queries never return trashed pages, so deletions are confirmed page by page. */
   pageState(pageId: string): Promise<"live" | "trashed" | "unknown">;
   setTrashed(pageId: string, inTrash: boolean): Promise<void>;
 }
@@ -103,7 +101,6 @@ export function textToRichText(text: string): Array<Json> {
   return out;
 }
 
-/** One paragraph (like the Zap's) holding the whole transcript; split only past Notion's per-block cap. */
 export function transcriptBlocks(text: string): Json[] {
   const rich = textToRichText(text);
   const blocks: Json[] = [];
@@ -117,7 +114,6 @@ export function transcriptBlocks(text: string): Json[] {
   return blocks.length ? blocks : [{ object: "block", type: "paragraph", paragraph: { rich_text: [] } }];
 }
 
-/** Fallback when Notion cannot parse a summary as markdown: one plain paragraph per line. */
 export function plainLineBlocks(markdown: string): Json[] {
   return markdown
     .split("\n")
@@ -140,8 +136,6 @@ export class HttpNotionStore implements NotionStore {
   ) {}
 
   private async api(method: string, path: string, body?: unknown, attempt = 0): Promise<Json> {
-    // Creates/appends are not idempotent: a 5xx can hide a success, so only reads retry on 5xx/network.
-    // 429 is always safe to retry (Notion rejected it before doing anything).
     const idempotent = method === "GET" || path.endsWith("/query") || (method === "PATCH" && path.startsWith("/pages/"));
     let res: Response;
     try {
@@ -317,7 +311,6 @@ export class HttpNotionStore implements NotionStore {
       const page = await this.api("GET", `/pages/${pageId}`);
       return page.in_trash === true || page.archived === true ? "trashed" : "live";
     } catch (err) {
-      // 404 means permanently deleted *or* lost access — never treat that as a deletion.
       if (err instanceof NotionError && err.status === 404) {
         return "unknown";
       }

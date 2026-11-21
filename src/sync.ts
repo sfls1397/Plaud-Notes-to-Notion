@@ -2,17 +2,6 @@ import { SYNC_FULL_EVERY_HOURS, SYNC_FULL_WINDOW_DAYS, TYPE_SUMMARY, TYPE_TRANSC
 import type { NotionRow, NotionStore } from "./notion.js";
 import type { ProfileState } from "./state.js";
 
-/**
- * Keeps each Transcript row's Meeting title and Participants equal to its
- * Summary sibling. Only Summary edits flow to Transcripts — never the other way.
- *
- * Siblings are found by page id (Toolbox rules/notion.md → Find Notion items by
- * id): state.pairs maps each Summary page id to its Transcript page id, filled
- * when this service writes a recording and backfilled from the file state.
- * Only a Summary with no pair yet is matched by Recorded minute (exactly one
- * Summary and one Transcript in that minute, as the retired Grok routine did);
- * the match is then remembered by id. Ambiguous minutes are skipped.
- */
 export interface SyncDeps {
   profile: string;
   notion: NotionStore;
@@ -53,7 +42,6 @@ type Plan = { transcript: NotionRow; patch: { title?: string; participants?: str
 const isSummary = (r: NotionRow) => r.types.includes(TYPE_SUMMARY);
 const isTranscript = (r: NotionRow) => r.types.includes(TYPE_TRANSCRIPT) && !r.types.includes(TYPE_SUMMARY);
 
-/** The one Summary and one Transcript in a Recorded minute (first-time fallback only). */
 export function pairInGroup(rows: NotionRow[]): { summary: NotionRow; transcript: NotionRow } | "ambiguous" | null {
   const summaries = rows.filter(isSummary);
   const transcripts = rows.filter(isTranscript);
@@ -66,10 +54,6 @@ export function pairInGroup(rows: NotionRow[]): { summary: NotionRow; transcript
   return { summary: summaries[0], transcript: transcripts[0] };
 }
 
-/**
- * Remembers a Summary↔Transcript pair by page id. Refuses (false) when either
- * page is already paired with a different page.
- */
 export function rememberPair(state: ProfileState, summaryId: string, transcriptId: string, minute: string): boolean {
   const pairs = (state.pairs ||= {});
   if (pairs[summaryId]) {
@@ -82,7 +66,6 @@ export function rememberPair(state: ProfileState, summaryId: string, transcriptI
   return true;
 }
 
-/** Pairs for every recording this service wrote: its file state holds both page ids. */
 export function backfillPairsFromFiles(state: ProfileState): number {
   let added = 0;
   for (const f of Object.values(state.files)) {
@@ -156,7 +139,6 @@ export async function runSync(deps: SyncDeps): Promise<SyncResult> {
         continue;
       }
       result.groupsChecked++;
-      // By id. A Transcript in the trash or gone is the deletion sync's business, never a re-match.
       transcript = inHand.get(pair.transcriptId) ?? (await deps.notion.rowById(pair.transcriptId));
       if (!transcript) {
         continue;
@@ -176,7 +158,7 @@ export async function runSync(deps: SyncDeps): Promise<SyncResult> {
         continue;
       }
       if (!rememberPair(deps.state, summary.id, found.transcript.id, minute)) {
-        result.ambiguous++; // that Transcript already belongs to another Summary
+        result.ambiguous++;
         continue;
       }
       transcript = found.transcript;
@@ -208,20 +190,8 @@ export interface DeletionResult {
   tracked: number;
 }
 
-/** How long a trashed pair stays eligible for restore (Notion keeps trash ~30 days). */
 const RESTORE_WINDOW_MS = 30 * 86_400_000;
 
-/**
- * A Summary and its Transcript live and die together: trash either one and the
- * other is trashed; restore either one from the trash and the other comes back.
- *
- * Notion queries never return trashed pages, so every cycle this checks, by
- * page id, any remembered pair (state.pairs) whose page stopped appearing in
- * the last SYNC_FULL_WINDOW_DAYS. Pairs are kept by id; a live Summary with no
- * pair yet is paired by Recorded minute (exactly one of each) the first time.
- * It only acts when Notion explicitly reports a page as in the trash — a 404
- * (permanent delete, or lost access) is never treated as a deletion.
- */
 export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
   const now = (deps.now || (() => new Date()))();
   backfillPairsFromFiles(deps.state);
@@ -242,15 +212,13 @@ export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
 
   for (const [summaryId, pair] of Object.entries(pairs)) {
     if (pair.gone || pair.minute < since) {
-      continue; // older than the window: kept for the title sync, no longer watched for deletion
+      continue;
     }
     const summaryLive = live.has(summaryId);
     const transcriptLive = live.has(pair.transcriptId);
 
     if (pair.trashedAt) {
-      // Past RESTORE_WINDOW_MS Notion has emptied its trash; the pair is kept so it is never re-made.
       if ((summaryLive || transcriptLive) && now.getTime() - Date.parse(pair.trashedAt) <= RESTORE_WINDOW_MS) {
-        // One side came back from the trash: bring the other back too.
         if (!summaryLive) {
           await setTrashed(summaryId, "summary", pair.minute, false, "its Transcript was restored");
         }
@@ -285,7 +253,7 @@ export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
       }
     } else if (summaryState === "trashed" && transcriptState === "trashed") {
       if (!deps.dryRun) {
-        pair.trashedAt = now.toISOString(); // both deleted by hand — still restore together
+        pair.trashedAt = now.toISOString();
         pair.trashed = "both";
       }
     } else if (summaryState === "unknown" || transcriptState === "unknown") {
@@ -294,7 +262,6 @@ export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
         pair.gone = now.toISOString();
       }
     }
-    // Both live but outside the window (Recorded edited): the pair stays.
   }
 
   const groups = new Map<string, NotionRow[]>();
@@ -305,7 +272,6 @@ export async function runDeletionSync(deps: SyncDeps): Promise<DeletionResult> {
     }
   }
   for (const [minute, group] of groups) {
-    // First-time pairing only: rememberPair leaves every page that already has a pair alone.
     const found = pairInGroup(group);
     if (found && found !== "ambiguous") {
       rememberPair(deps.state, found.summary.id, found.transcript.id, minute);

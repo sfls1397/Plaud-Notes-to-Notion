@@ -58,7 +58,7 @@ describe("HttpPlaudClient", () => {
     ]
   };
 
-  it("loads a recording, gunzipping linked blocks, and retries once after a 401", async () => {
+  it("loads a recording, gunzipping linked blocks, retries once after a 401 and never sends the Plaud token to S3", async () => {
     const s = session(["old", "new"]);
     const seen: string[] = [];
     const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
@@ -79,7 +79,7 @@ describe("HttpPlaudClient", () => {
     expect(rec.summaryMarkdown).toBe("## Core Synopsis\nGzipped summary.");
     expect(rec.segments).toEqual([{ speaker: "Speaker 1", startMs: 0, text: "Hi." }]);
     expect(rec.startAt?.toISOString()).toBe("2026-09-26T14:50:10.000Z");
-    expect(seen.some((l) => l.includes("s3.test") && l.includes("Bearer"))).toBe(false); // never send the Plaud token to S3
+    expect(seen.some((l) => l.includes("s3.test") && l.includes("Bearer"))).toBe(false);
   });
 
   it("reports a still-generating summary as null", async () => {

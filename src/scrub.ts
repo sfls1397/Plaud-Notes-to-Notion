@@ -3,13 +3,6 @@ import { redactSecrets } from "./redact.js";
 import { findCardDigits, redactCards } from "./card.js";
 import { findSsnDigits, redactDigits } from "./ssn.js";
 
-/**
- * One-off cleanup for rows written before a redaction existed (the Zap era for
- * SSNs, before 2026-10-01 for cards). Scans a data source, pairs rows by
- * Recorded minute (a value spoken in the transcript is also removed from the
- * summary), and rewrites only the affected rich-text runs in place — block
- * types, nesting and formatting are kept. Dry run unless `apply` is true.
- */
 type Json = Record<string, unknown>;
 
 interface TextBlock {
@@ -24,7 +17,6 @@ export interface ScrubResult {
   blocksUpdated: number;
 }
 
-/** Consecutive plain-text runs with identical formatting and link; other runs stand alone. */
 function sameFormatGroups(rich: TextBlock["rich"]): Array<TextBlock["rich"]> {
   const key = (r: TextBlock["rich"][number]) => (r.type === "text" ? JSON.stringify([r.annotations, r.text?.link ?? null]) : undefined);
   const groups: Array<TextBlock["rich"]> = [];
@@ -100,17 +92,12 @@ export async function scrubSensitive(options: {
     const loaded = await Promise.all(rows.map(async (p) => ({ page: p, blocks: await blocksOf(String(p.id)) })));
     const texts = loaded.map((l) => l.blocks.map((b) => b.rich.map((r) => r.plain_text).join("")).join("\n"));
     const cardFound = findCardDigits(texts);
-    // SSN values are looked for after card details are gone, exactly like ingest.
     const ssnFound = findSsnDigits(texts.map((t) => redactCards(t, cardFound).text));
     for (const { page, blocks } of loaded) {
       let ssn = 0;
       let card = 0;
       for (const block of blocks) {
         let changed = false;
-        // Adjacent runs with the same formatting are redacted as one string, so a
-        // trigger and its number split across runs are still caught. The Zap wrote
-        // whole transcripts as one run of up to ~11k chars; the API only accepts
-        // ≤2000 per run on write, so rewritten runs are re-split (same formatting).
         const rich: Json[] = [];
         for (const group of sameFormatGroups(block.rich)) {
           if (group[0].type !== "text") {

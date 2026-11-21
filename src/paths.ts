@@ -39,7 +39,6 @@ export function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
-/** Write JSON atomically (tmp + rename) so a crash never leaves half a state file. */
 export function writeJsonAtomic(file: string, value: unknown): void {
   ensureDir(path.dirname(file));
   const tmp = `${file}.${process.pid}.tmp`;

@@ -1,7 +1,4 @@
 #!/bin/sh
-# Installs/refreshes the LaunchAgent for the current user (GUI session, so Keychain works).
-# Usage: sh install-launchagent.sh [/path/to/bin/plaud-notes-to-notion.js]
-# Secrets stay in Keychain (service plaud-notes-to-notion); nothing secret goes in the plist.
 set -eu
 LABEL=com.plaud-notes-to-notion
 NODE=$(command -v node)

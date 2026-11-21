@@ -23,7 +23,7 @@ function ingestDeps(notion = new FakeNotion(), state: ProfileState = emptyState(
   } as never;
 }
 
-describe("pairs by page id", () => {
+describe("pairs by page id (Toolbox rules/notion.md → Find Notion items by id)", () => {
   it("a written recording is paired by its two page ids; re-running it reuses those pages and creates nothing", async () => {
     const d = ingestDeps();
     d.plaud.add({ id: "of_1" });
@@ -31,7 +31,6 @@ describe("pairs by page id", () => {
     const [s, t] = d.notion.rows;
     expect(d.state.pairs?.[s.id]).toEqual({ transcriptId: t.id, minute: "2026-09-26T14:50:00.000Z" });
 
-    // Re-run the same recording (state back to pending, page ids kept): no lookup by minute, nothing new.
     d.state.files.of_1.status = "pending";
     d.notion.lookups.length = 0;
     const again = await runIngest(d);
@@ -50,7 +49,7 @@ describe("pairs by page id", () => {
     state.lastFullSyncAt = "2026-09-25T21:00:00.000Z";
     const s1 = notion.rows.find((r) => r.id === "s1")!;
     s1.title = "Renamed Call";
-    s1.recorded = "2026-09-25T20:07:00.000Z"; // no longer in the Transcript's minute
+    s1.recorded = "2026-09-25T20:07:00.000Z";
     s1.lastEdited = "2026-09-25T21:03:00.000Z";
 
     const r = await runSync({ profile: "p", notion, state, save: () => undefined, log: () => undefined, now: () => new Date("2026-09-25T21:05:00Z") });

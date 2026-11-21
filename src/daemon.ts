@@ -47,11 +47,6 @@ function describe(err: unknown, credentials: string): { message: string; auth: b
   return { message: safeErrorMessage(err), auth: false };
 }
 
-/**
- * Long-running LaunchAgent loop. Per enabled profile: ingest every pollSeconds
- * (deep scan every 10 min), Summary→Transcript sync every syncSeconds.
- * Re-reads config.json when it changes, so turning Morgan Example on needs no restart.
- */
 export async function runDaemon(options: {
   store: SecretStore;
   log: Logger;

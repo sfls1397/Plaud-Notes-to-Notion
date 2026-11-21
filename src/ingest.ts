@@ -39,14 +39,6 @@ export interface IngestResult {
 
 const DEEP_SCAN_PAGES = 15;
 
-/**
- * Files to look at this cycle, oldest upload first:
- *  - new files (uploaded at/after startAfter) not seen yet;
- *  - files still waiting on Plaud (no summary/transcript yet) — every cycle while
- *    fresh, only on deep scans once they are "slow" (older than PENDING_FAST_HOURS).
- * Plaud lists by recording start, so a deep scan (every 10 min) walks back
- * WATCH_DAYS to catch late uploads and summaries generated late on old recordings.
- */
 async function candidates(deps: IngestDeps, deep: boolean): Promise<PlaudFileListing[]> {
   const now = (deps.now || (() => new Date()))();
   const floor = new Date(now.getTime() - WATCH_DAYS * 86_400_000);
@@ -73,12 +65,6 @@ async function candidates(deps: IngestDeps, deep: boolean): Promise<PlaudFileLis
   return out.sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
 }
 
-/**
- * One-time snapshot at cutover: every recording from the last WATCH_DAYS that was
- * uploaded before startAfter. Ones Plaud has already finished belonged to the Zap
- * ("baseline", never written). Ones still without a summary/transcript go on the
- * slow watch list, so a summary generated later is still written — as the Zap did.
- */
 export async function runBaseline(deps: IngestDeps): Promise<{ baseline: number; watching: number }> {
   const now = (deps.now || (() => new Date()))();
   const floor = new Date(now.getTime() - WATCH_DAYS * 86_400_000);
@@ -111,7 +97,6 @@ export async function runBaseline(deps: IngestDeps): Promise<{ baseline: number;
   return { baseline, watching };
 }
 
-/** A row we (or a crashed earlier attempt) already wrote: same minute, same Type, same title. */
 function alreadyWritten(rows: NotionRow[], type: RowType, title: string): NotionRow | undefined {
   return rows.find((r) => r.types.includes(type) && r.title.trim() === title.trim());
 }
@@ -125,9 +110,7 @@ export interface PreparedRecording {
   cardRedactions: number;
 }
 
-/** Everything that happens to Plaud text before it leaves this Mac. */
 export function prepareRecording(rec: PlaudRecording): PreparedRecording {
-  // Cards first: "last four of the card" belongs to the card, not the SSN.
   const cards = redactCardsAcross({
     summary: rec.summaryMarkdown || "",
     transcript: formatTranscript(rec.segments),
@@ -144,7 +127,6 @@ export function prepareRecording(rec: PlaudRecording): PreparedRecording {
   };
 }
 
-/** "limit": the Claude subscription is at a usage limit, so every later label this cycle would fail the same way. */
 async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileState, result: IngestResult): Promise<"limit" | void> {
   const now = (deps.now || (() => new Date()))();
   const rec = await deps.plaud.getRecording(file.id);
@@ -185,8 +167,6 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
     } catch (err) {
       st.lastError = safeErrorMessage(err);
       if (err instanceof LlmError && err.usageLimit) {
-        // The Claude subscription is at its usage limit: the note waits for it, and the
-        // wait never counts toward the no-participants fallback.
         deps.log(`[${deps.profile}] Claude subscription at its usage limit; "${prepared.plaudTitle}" waits for it`);
         result.pending++;
         return "limit";
@@ -217,8 +197,6 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
     return;
   }
 
-  // Page ids first. The Recorded-minute + title lookup only runs while an id is still missing
-  // (a retry after a crash between create and save), so a row is never written twice.
   const existing = st.summaryPageId && st.transcriptPageId ? [] : await deps.notion.rowsAtMinute(prepared.recorded);
   if (!st.summaryPageId) {
     const found = alreadyWritten(existing, TYPE_SUMMARY, title);
@@ -267,7 +245,6 @@ export async function runIngest(deps: IngestDeps, options: { deep?: boolean } = 
     const st = (deps.state.files[file.id] ||= { status: "pending", firstSeen: now.toISOString(), llmAttempts: 0 });
     try {
       if ((await processOne(deps, file, st, result)) === "limit") {
-        // One limit ends the cycle: the other notes keep waiting and are tried next cycle.
         result.pending += files.length - index - 1;
         break;
       }
@@ -276,7 +253,6 @@ export async function runIngest(deps: IngestDeps, options: { deep?: boolean } = 
       if (st.status === "pending") result.pending++;
       result.errors.push(`${file.name}: ${st.lastError}`);
       deps.save();
-      // Auth problems affect every file; stop the cycle and let the daemon alert.
       const e = err as { unauthorized?: boolean; code?: string };
       if (e.unauthorized || e.code === "AUTH_EXPIRED") {
         throw err;

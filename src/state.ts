@@ -2,14 +2,11 @@ import { STATE_KEEP_DAYS } from "./constants.js";
 import { getProfileStatePath, readJson, writeJsonAtomic } from "./paths.js";
 
 export interface FileState {
-  /** baseline = finished before cutover (the Zap's); pending = waiting on Plaud or a retry. */
   status: "pending" | "done" | "baseline";
-  /** Waiting longer than PENDING_FAST_HOURS: re-checked on deep scans only. */
   slow?: boolean;
   firstSeen: string;
   name?: string;
   recorded?: string;
-  /** Labels are computed once and reused on retries so Summary and Transcript always match. */
   title?: string;
   participants?: string[];
   labelSource?: "llm" | "fallback";
@@ -27,26 +24,15 @@ export interface ProfileState {
   files: Record<string, FileState>;
   lastSyncAt?: string;
   lastFullSyncAt?: string;
-  /** When the one-time cutover snapshot ran. */
   baselineAt?: string;
-  /**
-   * Summary page id → its Transcript sibling, as last seen live. Lets the sync
-   * notice a Summary that was moved to the trash and trash its Transcript too.
-   */
   pairs?: Record<string, PairState>;
 }
 
 export interface PairState {
   transcriptId: string;
   minute: string;
-  /** Set once either side of the pair is in the trash; restoring either side restores both. */
   trashedAt?: string;
-  /** Which side(s) the service trashed, or "both" when both were trashed together. */
   trashed?: "summary" | "transcript" | "both";
-  /**
-   * When a page of the pair answered 404 (permanently deleted, or no access). The
-   * pair is kept, never re-made and never acted on, so it is reported only once.
-   */
   gone?: string;
 }
 
@@ -63,7 +49,6 @@ export function saveState(profile: string, state: ProfileState, env: NodeJS.Proc
   writeJsonAtomic(getProfileStatePath(profile, env), state);
 }
 
-/** Forget finished files after a month; the startAfter watermark keeps them from coming back. */
 export function pruneState(state: ProfileState, now: Date): void {
   const cutoff = now.getTime() - STATE_KEEP_DAYS * 86_400_000;
   for (const [id, f] of Object.entries(state.files)) {

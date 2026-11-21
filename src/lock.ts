@@ -48,10 +48,6 @@ export interface JobLock {
   readonly ownsLock: boolean;
 }
 
-/**
- * Exclusive job.lock. A live holder is never displaced (skip-if-already-running).
- * Dead-PID takeover uses wx-create so a peer's freshly written lock is not deleted.
- */
 export function createJobLock(options: {
   lockFile: string;
   pid?: number;
@@ -147,7 +143,6 @@ export function createJobLock(options: {
         }
       }
     } catch {
-      /* ignore */
     }
   }
 

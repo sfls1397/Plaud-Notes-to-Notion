@@ -3,7 +3,6 @@ import { parseConfig } from "../src/config.js";
 import { anthropicKey, buildProfileRuntime, openaiKey } from "../src/runtime.js";
 import { MemorySecretStore, readSecret, secretEnvName } from "../src/secrets.js";
 
-// Fake values only. Never a real key.
 const FAKE_ENV_TOKEN = "fake-env-notion-token";
 const FAKE_KEYCHAIN_TOKEN = "fake-keychain-notion-token";
 
@@ -15,7 +14,6 @@ async function notionTokenUsed(env: NodeJS.ProcessEnv, keychain: Record<string, 
   const store = new MemorySecretStore();
   for (const [k, v] of Object.entries(keychain)) await store.set(k, v);
   const rt = await buildProfileRuntime({ name: "peter", profile, config: parseConfig({}), store, env, needPlaud: false, needLabeler: false });
-  // HttpNotionStore keeps the token in its private options; it sends exactly this as the Bearer token.
   return (rt.notion as unknown as { options: { token: string } }).options.token;
 }
 
