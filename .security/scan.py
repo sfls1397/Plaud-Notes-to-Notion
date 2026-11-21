@@ -129,15 +129,6 @@ def policy(root):
     return json.loads((root / '.security/policy.json').read_text())
 
 
-def normalize_parser(root):
-    p = root / 'src/core/sonos.ts'
-    if p.exists():
-        text = p.read_text()
-        old = r'/<!--\s*SDT:[^>]*-->/g'
-        new = r'new RegExp("<!--\\s*SDT:[^>]*-->", "g")'
-        p.write_text(text.replace(old, new))
-
-
 def language_scan(root, targets=None):
     spec = importlib.util.spec_from_file_location('additional_languages', root / '.security/languages.py')
     helper = importlib.util.module_from_spec(spec)
@@ -161,7 +152,6 @@ def full():
         reviewed = policy(snapshot)
         audit(snapshot, reviewed)
         audit_lint(snapshot)
-        normalize_parser(snapshot)
         semgrep(snapshot, reviewed)
         language_scan(snapshot)
 
@@ -199,7 +189,6 @@ def staged():
             audit_lint(snapshot)
         targets = [x for x in changed if (snapshot / x).is_file()
                    and Path(x).suffix in ('.js', '.cjs', '.mjs', '.jsx', '.ts', '.tsx', '.py')]
-        normalize_parser(snapshot)
         semgrep(snapshot, reviewed, targets)
         language_scan(snapshot, changed)
 
