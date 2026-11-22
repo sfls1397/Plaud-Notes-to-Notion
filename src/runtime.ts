@@ -15,8 +15,8 @@ import {
   plaudAccount,
   relogin
 } from "./constants.js";
-import { createLabeler, solLabeler, type Labeler } from "./llm.js";
-import { serviceSelection, type ServiceSelection } from "./service-engine.js";
+import { AnthropicLabeler, createLabeler, solLabeler, type Labeler } from "./llm.js";
+import { labelerSelection, type ServiceSelection } from "./service-engine.js";
 import { HttpNotionStore, type NotionStore } from "./notion.js";
 import { getStatusPath, readJson, writeJsonAtomic } from "./paths.js";
 import { HttpPlaudClient, type PlaudClient } from "./plaud/client.js";
@@ -103,9 +103,15 @@ export async function buildProfileRuntime(options: {
 
   let labeler: Labeler = { label: () => Promise.reject(new SetupError("Labeler not needed for this command")) };
   if (options.needLabeler) {
-    const selection = options.selection || serviceSelection(env);
+    const selection = options.selection || labelerSelection(options.config.llmModel, env);
     if (selection.engine === "sol") {
       labeler = solLabeler(env);
+    } else if (selection.claudeApi) {
+      labeler = new AnthropicLabeler({
+        apiKey: await anthropicKey(options.store, creds, env),
+        model: options.config.llmModel,
+        baseUrl: options.config.anthropicBaseUrl
+      });
     } else {
       const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
       const claude = isAnthropicModel(llmModel);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.12
+
+- Add a service-only Claude API billing choice. Changes take effect between ingest units and keep the configured model and its existing Anthropic key.
+
 ## 1.2.11
 
 - Remove every code comment (the repository's comment ban, dev process step 4). Each reason a comment carried now lives in a test name, README.md or docs/GUARDS.md. No behavior change: the compiled code is the same with comments dropped.
