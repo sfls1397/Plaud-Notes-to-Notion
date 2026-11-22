@@ -18,7 +18,7 @@ function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "service-policy-test-"));
   folders.push(root);
   const policy = path.join(root, "policy.json");
-  const env = { ...process.env, TOOLBOX_SERVICE_ENGINE_FILE: policy, TOOLBOX_SERVICE_MODEL_BIN: path.join(root, "model.mjs") };
+  const env = { ...process.env, HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: policy, TOOLBOX_SERVICE_MODEL_BIN: path.join(root, "model.mjs") };
   const write = (engine: string, generation = engine) => fs.writeFileSync(policy, JSON.stringify({ version: 1, engine, generation, updated_at: "2026-11-03T12:00:00Z" }));
   const transport = (body: string) => fs.writeFileSync(env.TOOLBOX_SERVICE_MODEL_BIN, `#!/usr/bin/env node\n${body}\n`, { mode: 0o700 });
   const shell = (body: string) => fs.writeFileSync(env.TOOLBOX_SERVICE_MODEL_BIN, `#!/bin/sh\n${body}\n`, { mode: 0o700 });

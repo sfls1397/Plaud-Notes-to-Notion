@@ -158,10 +158,13 @@ for the current user and loads it; it runs `plaud-notes-to-notion run`.
 
 The running service is only ever the published npm package. After a change is
 merged: bump the version (`package.json`, `package-lock.json`, `CHANGELOG.md`),
-publish a GitHub Release (its workflow tests, then publishes to npm), and on the
-Mac run `npm install -g plaud-notes-to-notion@<version>`, then restart the
-LaunchAgent. Never `git pull` or build in the checkout the LaunchAgent runs
-from as a deploy step; `npm run build` in a checkout is for development.
+publish a GitHub Release (its workflow tests, then publishes to npm), and verify the exact tarball is available. On the Mac, take the Mini install lock. Drain the running daemon before replacing its package:
+
+1. Disable the service with `launchctl disable gui/$(id -u)/com.plaud-notes-to-notion` to hold new launches. Confirm the current service child that runs the global Plaud CLI and send that Node process `SIGTERM`. Its handler lets an active unit finish. Wait for the old Node process to exit, its daemon lock to be released and no replacement to start.
+2. Boot out the idle service, then run `npm install -g plaud-notes-to-notion@<version>` into the existing prefix. If the drain cannot be verified, stop the deploy. The LaunchAgent's shutdown timeout can interrupt a unit, so a forced restart is unsafe while it is active.
+3. Enable and load the same LaunchAgent, verify the new running process and version, then release the install lock.
+
+Use the published package for deployment. Build from a checkout for development.
 
 ## Everyday commands
 

@@ -133,6 +133,7 @@ async function doctor(profileName: string, store: SecretStore): Promise<number> 
         line(true, `Claude Code present for the Claude subscription (model ${config.llmModel})`);
       } catch (err) {
         line(false, safeErrorMessage(err));
+        return 1;
       }
       const fallback = await anthropicFallbackKey(store, creds, process.env);
       console.log(`  ${fallback ? "Anthropic key present: the Claude API fallback while the subscription is at its usage limit" : "No Anthropic key: on the subscription's usage limit notes wait for it"}`);

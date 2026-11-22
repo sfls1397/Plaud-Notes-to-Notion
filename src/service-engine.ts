@@ -43,8 +43,8 @@ export function serviceSelection(env: NodeJS.ProcessEnv = process.env): ServiceS
   }
 }
 
-function useClaudeApi(): boolean {
-  const file = path.join(os.homedir(), ".toolbox", "claude-service-billing-plaud");
+function useClaudeApi(env: NodeJS.ProcessEnv): boolean {
+  const file = path.join(env.HOME || os.homedir(), ".toolbox", "claude-service-billing-plaud");
   let descriptor: number;
   try {
     descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
@@ -69,7 +69,7 @@ function useClaudeApi(): boolean {
 
 export function labelerSelection(model: string, env: NodeJS.ProcessEnv = process.env): ServiceSelection {
   const selection = serviceSelection(env);
-  if (selection.engine !== "claude" || !isAnthropicModel(model) || !useClaudeApi()) return selection;
+  if (selection.engine !== "claude" || !isAnthropicModel(model) || !useClaudeApi(env)) return selection;
   return Object.freeze({ ...selection, claudeApi: true });
 }
 
