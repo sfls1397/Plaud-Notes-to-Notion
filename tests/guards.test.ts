@@ -3,7 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createJobLock } from "../src/lock.js";
 import { HttpNotionStore, NotionError } from "../src/notion.js";
 import { runOAuthCallback } from "../src/plaud/callback.js";
@@ -231,6 +231,51 @@ async function freePort(): Promise<number> {
 }
 
 describe("runOAuthCallback", () => {
+  it("binds 127.0.0.1 and ::1 only, because Plaud's registered redirect is localhost:8199 and a wider bind would let another machine answer the callback", async () => {
+    const port = await freePort();
+    const listen = vi.spyOn(net.Server.prototype, "listen");
+    try {
+      const reachable: string[] = [];
+      const result = await new Promise<{ status: string }>((resolve) => {
+        void runOAuthCallback({
+          expectedState: "good",
+          port,
+          timeoutMs: 10_000,
+          postSuccessDelayMs: 0,
+          exchangeCode: async () => undefined,
+          path: "/callback",
+          onListening: () => {
+            void (async () => {
+              const offered = Object.values(os.networkInterfaces())
+                .flat()
+                .filter((entry): entry is os.NetworkInterfaceInfo => entry !== undefined && !entry.internal && entry.family === "IPv4")
+                .map((entry) => entry.address);
+              for (const address of offered) {
+                const open = await new Promise<boolean>((done) => {
+                  const socket = net.connect({ host: address, port });
+                  socket.once("connect", () => {
+                    socket.destroy();
+                    done(true);
+                  });
+                  socket.once("error", () => done(false));
+                });
+                if (open) reachable.push(address);
+              }
+              await fetch(`http://127.0.0.1:${port}/callback?state=good&code=real`).catch(() => undefined);
+            })();
+          }
+        }).then(resolve);
+      });
+      expect(result.status).toBe("success");
+      const hosts = listen.mock.calls.map((call) => call[1]);
+      expect(hosts[0]).toBe("127.0.0.1");
+      expect(hosts.every((host) => host === "127.0.0.1" || host === "::1")).toBe(true);
+      expect(reachable).toEqual([]);
+    } finally {
+      listen.mockRestore();
+    }
+  });
+
   it("rejects an unexpected state without exchanging a code", async () => {
     const port = await freePort();
     const codes: string[] = [];

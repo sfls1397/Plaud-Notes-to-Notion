@@ -6,6 +6,8 @@ const [modules, command, ...files] = process.argv.slice(2);
 const ts = createRequire(path.join(modules ?? '.', 'same-tree.js'))('typescript');
 const TEST_CALLS = new Set(['it', 'test', 'describe']);
 const TEST_MODES = new Set(['only', 'skip', 'todo']);
+const KEYWORD_FLAGS = ts.NodeFlags.BlockScoped | ts.NodeFlags.Namespace;
+const BOOLEAN_PROPERTIES = ['isTypeOnly', 'isExportEquals'];
 
 function kindOf(file) {
   if (file.endsWith('.tsx')) return ts.ScriptKind.TSX;
@@ -92,7 +94,10 @@ function lineOf(node) {
 
 function difference(a, b) {
   if (a.kind !== b.kind) return 'node kind';
-  if ((a.flags & ts.NodeFlags.BlockScoped) !== (b.flags & ts.NodeFlags.BlockScoped)) return 'declaration kind';
+  if ((a.flags & KEYWORD_FLAGS) !== (b.flags & KEYWORD_FLAGS)) return 'declaration kind';
+  for (const property of BOOLEAN_PROPERTIES) {
+    if (Boolean(a[property]) !== Boolean(b[property])) return property;
+  }
   if (a.operator !== b.operator) return 'operator';
   if (!ts.isSourceFile(a) && (typeof a.text === 'string' || typeof b.text === 'string')) {
     const left = isTestTitle(a) ? '' : a.text;

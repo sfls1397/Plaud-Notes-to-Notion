@@ -88,7 +88,13 @@ describe("same-tree compare", () => {
     ["a changed string", "f('x');", "f('y');"],
     ["a changed template", "f(`x${a}`);", "f(`y${a}`);"],
     ["a changed regular expression", "const r = /a/g;", "const r = /a/i;"],
-    ["an emptied block", "if (a) { f(); }", "if (a) { }"]
+    ["an emptied block", "if (a) { f(); }", "if (a) { }"],
+    ["import type turned into import", "import type { A } from './a';", "import { A } from './a';"],
+    ["export type turned into export", "export type { A } from './a';", "export { A } from './a';"],
+    ["an inline type specifier dropped", "import { type A, b } from './a';", "import { A, b } from './a';"],
+    ["import type require turned into import require", "import type a = require('a');", "import a = require('a');"],
+    ["export default turned into export equals", "export default foo;", "export = foo;"],
+    ["namespace turned into module", "namespace N { export const x = 1; }", "module N { export const x = 1; }"]
   ])("fails on %s", (_name, before, after) => {
     const result = same(before, after);
     expect(result.status).toBe(1);
