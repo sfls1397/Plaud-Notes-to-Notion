@@ -267,7 +267,7 @@ describe("runOAuthCallback", () => {
         }).then(resolve);
       });
       expect(result.status).toBe("success");
-      const hosts = listen.mock.calls.map((call) => call[1]);
+      const hosts = listen.mock.calls.map((call) => (call as unknown[])[1]);
       expect(hosts[0]).toBe("127.0.0.1");
       expect(hosts.every((host) => host === "127.0.0.1" || host === "::1")).toBe(true);
       expect(reachable).toEqual([]);
