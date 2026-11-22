@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -199,4 +199,37 @@ describe("subscription transport", () => {
     await expect(serviceModel({ ...request, timeoutMs: 600001 }, f.env)).rejects.toThrow("timeout");
     await expect(serviceModel({ ...request, prompt: "x".repeat(3 * 1024 * 1024) }, f.env)).rejects.toThrow("request exceeded bound");
   });
+});
+
+it("routes Plaud labels straight to the named Haiku API after service billing changes", async () => {
+  const f = fixture();
+  f.write("claude");
+  const home = vi.spyOn(os, "homedir").mockReturnValue(f.root);
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ content: [
+    { type: "tool_use", name: "plaud_labels", input: { participants: ["Sam"] } }
+  ] }));
+  vi.stubGlobal("fetch", fetch);
+  try {
+    fs.mkdirSync(path.join(f.root, ".toolbox"));
+    fs.writeFileSync(path.join(f.root, ".toolbox/claude-service-billing-plaud"), "claude-api\n", { mode: 0o600 });
+    const store = new MemorySecretStore();
+    await store.set("notion:p", "fixture");
+    await store.set("anthropic:p", "fixture-key");
+    const config = parseConfig({ profiles: { p: { owner: "Alex Example", notionDataSourceId: "0".repeat(32), startAfter: "2026-01-01T00:00:00Z" } } });
+    const options = { name: "p", profile: config.profiles.p, config, store, needPlaud: false, needLabeler: true,
+      env: { ...f.env, CLAUDE_SUBSCRIPTION_BIN: path.join(f.root, "absent-claude") } };
+    const runtime = await buildProfileRuntime(options);
+    await expect(runtime.labeler.label({ owner: "Alex Example", plaudTitle: "fixture", summaryMarkdown: "",
+      transcriptText: "Sam: hello", knownParticipants: [] })).resolves.toEqual({ participants: ["Sam"] });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith("https://api.anthropic.com/v1/messages", expect.objectContaining({
+      headers: expect.objectContaining({ "x-api-key": "fixture-key" }),
+      body: expect.stringContaining('"model":"claude-haiku-5-5"')
+    }));
+    await store.delete("anthropic:p");
+    await expect(buildProfileRuntime(options)).rejects.toThrow(/Anthropic API key/);
+  } finally {
+    vi.unstubAllGlobals();
+    home.mockRestore();
+  }
 });

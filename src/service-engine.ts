@@ -2,10 +2,12 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isAnthropicModel } from "./constants.js";
 
 export interface ServiceSelection {
   readonly engine: "sol" | "claude";
   readonly generation: string;
+  readonly claudeApi?: true;
 }
 
 export class ServiceModelError extends Error {
@@ -39,6 +41,36 @@ export function serviceSelection(env: NodeJS.ProcessEnv = process.env): ServiceS
   } finally {
     fs.closeSync(descriptor);
   }
+}
+
+function useClaudeApi(): boolean {
+  const file = path.join(os.homedir(), ".toolbox", "claude-service-billing-plaud");
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw new ServiceModelError("Claude service billing policy is unreadable");
+  }
+  try {
+    const marker = "claude-api\n";
+    const stat = fs.fstatSync(descriptor);
+    const data = Buffer.alloc(marker.length + 1);
+    if (!stat.isFile() || stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid())
+        || stat.size !== marker.length || fs.readSync(descriptor, data, 0, data.length, 0) !== marker.length
+        || data.toString("utf8", 0, marker.length) !== marker) throw new Error();
+    return true;
+  } catch {
+    throw new ServiceModelError("Claude service billing policy is invalid");
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+export function labelerSelection(model: string, env: NodeJS.ProcessEnv = process.env): ServiceSelection {
+  const selection = serviceSelection(env);
+  if (selection.engine !== "claude" || !isAnthropicModel(model) || !useClaudeApi()) return selection;
+  return Object.freeze({ ...selection, claudeApi: true });
 }
 
 export interface ServiceRequest {

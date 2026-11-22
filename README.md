@@ -205,3 +205,7 @@ pull-request CI also scans full fetched history and package contents.
 Use home-derived paths and local config for real owners and destinations.
 After a rewritten history, discard old clones and re-clone; merging old history
 can restore removed data.
+
+### Claude API billing on the Mini
+
+After installing this build, `claude-side --service-billing plaud api` selects the Messages API for Claude labels. The next ingest unit uses the configured model and existing profile or shared Anthropic key. The daemon reads the choice between units. `claude-side --service-billing plaud` reads the selection and the explicit `default` argument restores the ordinary billing policy.

@@ -1,3 +1,4 @@
+import { labelerSelection } from "./service-engine.js";
 import { execFileSync } from "node:child_process";
 import { getProfile, loadConfig } from "./config.js";
 import { ANTHROPIC_ACCOUNT, anthropicAccount, isAnthropicModel, notionAccount, OPENAI_ACCOUNT, openaiAccount, PACKAGE_NAME, PACKAGE_VERSION, plaudAccount } from "./constants.js";
@@ -8,7 +9,7 @@ import { getConfigPath, getLogFilePath } from "./paths.js";
 import { runPlaudLogin } from "./plaud/login.js";
 import { createAuthSession } from "./plaud/session.js";
 import { safeErrorMessage } from "./redact.js";
-import { anthropicFallbackKey, buildProfileRuntime, llmKey, readStatus, requireClaudeCode } from "./runtime.js";
+import { anthropicFallbackKey, anthropicKey, buildProfileRuntime, llmKey, readStatus, requireClaudeCode } from "./runtime.js";
 import { createSecretStore, readSecret, type SecretStore } from "./secrets.js";
 import { loadState, saveState } from "./state.js";
 import { scrubSensitive } from "./scrub.js";
@@ -122,6 +123,12 @@ async function doctor(profileName: string, store: SecretStore): Promise<number> 
     }
     if (isAnthropicModel(config.llmModel)) {
       try {
+        const selection = labelerSelection(config.llmModel);
+        if (selection.claudeApi) {
+          await anthropicKey(store, creds, process.env);
+          line(true, `Anthropic API key present (model ${config.llmModel})`);
+          return ok ? 0 : 1;
+        }
         requireClaudeCode(process.env);
         line(true, `Claude Code present for the Claude subscription (model ${config.llmModel})`);
       } catch (err) {

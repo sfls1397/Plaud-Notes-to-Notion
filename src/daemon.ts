@@ -12,7 +12,7 @@ import { buildProfileRuntime, notifyMac, readStatus, SetupError, updateStatus, t
 import type { SecretStore } from "./secrets.js";
 import { loadState, pruneState, saveState } from "./state.js";
 import { runDeletionSync, runSync } from "./sync.js";
-import { serviceSelection } from "./service-engine.js";
+import { labelerSelection } from "./service-engine.js";
 
 const DEEP_SCAN_EVERY_MS = 10 * 60_000;
 const ALERT_EVERY_MS = 6 * 3_600_000;
@@ -112,7 +112,7 @@ export async function runDaemon(options: {
       let ingestReady = profile.ingest;
       let selection;
       try {
-        selection = profile.ingest ? serviceSelection(env) : undefined;
+        selection = profile.ingest ? labelerSelection(config.llmModel, env) : undefined;
       } catch (error) {
         if (now >= t.nextPoll) {
           reportError(name, profile.credentials, error);
@@ -120,7 +120,7 @@ export async function runDaemon(options: {
         }
         ingestReady = false;
       }
-      const selectionKey = selection ? `${selection.engine}:${selection.generation}` : "sync-only";
+      const selectionKey = selection ? `${selection.engine}:${selection.generation}:${selection.claudeApi === true}` : "sync-only";
       if (ingestReady && t.selectionGeneration !== selectionKey) {
         t.runtime = undefined;
         t.runtimeRetryAt = 0;
