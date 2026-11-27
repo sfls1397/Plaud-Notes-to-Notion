@@ -19,7 +19,7 @@ export class ModelResolveError extends Error {
 
 const TIMEOUT_MS = 10_000;
 const ATTEMPTS = 2;
-const SECRET_ENV = /^(?:NOTION_TOKEN|(?:OPENAI|ANTHROPIC)_API_KEY)/i;
+const ENV_KEEP = /^(?:HOME|PATH|TMPDIR|LANG|LC_ALL|USER|LOGNAME|TZ|TOOLBOX_[A-Z_]+|T3_[A-Z_]+)$/;
 
 export function resolverBinary(env: NodeJS.ProcessEnv = process.env): string {
   return env.TOOLBOX_MODEL_VERSIONS_BIN?.trim() || path.join(env.HOME || os.homedir(), ".toolbox", "runner", "bin", "model-versions");
@@ -27,7 +27,7 @@ export function resolverBinary(env: NodeJS.ProcessEnv = process.env): string {
 
 function attempt(route: ModelRoute, family: ModelFamily, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<string> {
   const binary = resolverBinary(env);
-  const childEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !SECRET_ENV.test(name)));
+  const childEnv = Object.fromEntries(Object.entries(env).filter(([name]) => ENV_KEEP.test(name)));
   return new Promise((resolve, reject) => {
     execFile(binary, ["resolve", route, family],
       { env: childEnv, timeout: timeoutMs, killSignal: "SIGKILL", maxBuffer: 64 * 1024, encoding: "utf8" },

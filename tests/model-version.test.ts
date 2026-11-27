@@ -107,9 +107,10 @@ describe("the resolver call", () => {
     }
   });
 
-  it("keeps the API keys out of the resolver's environment", async () => {
-    const r = resolver('env | grep -c "API_KEY" >&2; echo claude-haiku-9-9');
-    await expect(resolveModel("claude-api", "haiku", { ...r.env, ANTHROPIC_API_KEY: "fixture-not-a-key" })).resolves.toBe("claude-haiku-9-9");
+  it("gives the resolver only its allowlisted environment, never an API key or token", async () => {
+    const r = resolver('env | grep -E "API_KEY|TOKEN|OAUTH" >&2 && exit 4; echo claude-haiku-9-9');
+    const env = { ...r.env, ANTHROPIC_API_KEY: "fixture-a", OPENAI_API_KEY: "fixture-b", ANTHROPIC_AUTH_TOKEN: "fixture-c", CLAUDE_CODE_OAUTH_TOKEN: "fixture-d", NOTION_TOKEN: "fixture-e" };
+    await expect(resolveModel("claude-api", "haiku", env)).resolves.toBe("claude-haiku-9-9");
   });
 
   it("shows what a family word resolves to and leaves an explicit id as written", async () => {
@@ -217,6 +218,7 @@ describe("ingest", () => {
       expect(result.errors.join("\n")).toMatch(/route claude, family haiku.*catalog missing/);
     }
     expect(notion.rows).toHaveLength(0);
+    expect(Object.values(deps.state.files).every((f) => f.llmAttempts === 0)).toBe(true);
   });
 });
 
