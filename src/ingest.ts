@@ -8,6 +8,7 @@ import {
   recordedMinute
 } from "./format.js";
 import { LlmError, type Labeler } from "./llm.js";
+import { ModelResolveError } from "./model-version.js";
 import type { NotionRow, NotionStore, RowType } from "./notion.js";
 import type { PlaudClient, PlaudFileListing, PlaudRecording } from "./plaud/client.js";
 import { redactCardsAcross } from "./card.js";
@@ -172,7 +173,7 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
         return "limit";
       }
       st.llmAttempts++;
-      if (deps.labeler.allowFallback === false) throw err;
+      if (deps.labeler.allowFallback === false || err instanceof ModelResolveError) throw err;
       if (st.llmAttempts < LLM_MAX_ATTEMPTS) {
         deps.log(`[${deps.profile}] participant labeling failed for "${prepared.plaudTitle}" (attempt ${st.llmAttempts}/${LLM_MAX_ATTEMPTS}): ${st.lastError}`);
         result.pending++;

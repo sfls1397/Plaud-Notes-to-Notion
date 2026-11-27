@@ -4,6 +4,7 @@ import { getProfile, loadConfig } from "./config.js";
 import { ANTHROPIC_ACCOUNT, anthropicAccount, isAnthropicModel, notionAccount, OPENAI_ACCOUNT, openaiAccount, PACKAGE_NAME, PACKAGE_VERSION, plaudAccount } from "./constants.js";
 import { runDaemon } from "./daemon.js";
 import { runIngest } from "./ingest.js";
+import { describeModel } from "./model-version.js";
 import { createLogger } from "./log.js";
 import { getConfigPath, getLogFilePath } from "./paths.js";
 import { runPlaudLogin } from "./plaud/login.js";
@@ -126,11 +127,11 @@ async function doctor(profileName: string, store: SecretStore): Promise<number> 
         const selection = labelerSelection(config.llmModel);
         if (selection.claudeApi) {
           await anthropicKey(store, creds, process.env);
-          line(true, `Anthropic API key present (model ${config.llmModel})`);
+          line(true, `Anthropic API key present (model ${await describeModel("claude-api", config.llmModel)})`);
           return ok ? 0 : 1;
         }
         requireClaudeCode(process.env);
-        line(true, `Claude Code present for the Claude subscription (model ${config.llmModel})`);
+        line(true, `Claude Code present for the Claude subscription (model ${await describeModel("claude", config.llmModel)})`);
       } catch (err) {
         line(false, safeErrorMessage(err));
         return 1;

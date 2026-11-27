@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { isAnthropicModel } from "./constants.js";
 
+const SOL_FAMILY = /^gpt-\d+(?:\.\d+)*-sol$/;
+
 export interface ServiceSelection {
   readonly engine: "sol" | "claude";
   readonly generation: string;
@@ -132,7 +134,7 @@ export function serviceModel(request: ServiceRequest, env: NodeJS.ProcessEnv = p
       if (code !== 0) return reject(new ServiceModelError(code === 2 ? "Codex subscription usage limit" : "Service model failed", code === 2));
       try {
         const reply = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        if (!reply || reply.version !== 1 || reply.engine !== "codex" || reply.model !== "gpt-6.1-sol"
+        if (!reply || reply.version !== 1 || reply.engine !== "codex" || !SOL_FAMILY.test(String(reply.model))
             || typeof reply.text !== "string" || !reply.text.trim()) throw new Error();
         resolve(reply.text);
       } catch {

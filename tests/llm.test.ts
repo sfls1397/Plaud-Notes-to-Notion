@@ -95,7 +95,7 @@ describe("createLabeler", () => {
 describe("config LLM defaults", () => {
   it("defaults to Claude Haiku and keeps Luna one config field away", () => {
     const d = parseConfig({});
-    expect(d.llmModel).toBe("claude-haiku-5-5");
+    expect(d.llmModel).toBe("haiku");
     expect(d.anthropicBaseUrl).toBe("https://api.anthropic.com");
     expect(d.openaiBaseUrl).toBe("https://api.openai.com/v1");
     expect(parseConfig({ llmModel: "gpt-6-luna" }).llmModel).toBe("gpt-6-luna");
@@ -120,7 +120,7 @@ describe("buildProfileRuntime labeler key", () => {
     await store.set("notion:p", "n");
     for (const [k, v] of Object.entries(secrets)) await store.set(k, v);
     const config = parseConfig({ llmModel });
-    return buildProfileRuntime({ name: "p", profile, config, store, env: { CLAUDE_SUBSCRIPTION_BIN: claude }, needPlaud: false, needLabeler: true });
+    return buildProfileRuntime({ name: "p", profile, config, store, env: { HOME: "/nonexistent", CLAUDE_SUBSCRIPTION_BIN: claude }, needPlaud: false, needLabeler: true });
   };
   it("Haiku runs on the Claude subscription: the Anthropic key is optional (its limit fallback), Claude Code is required", async () => {
     await expect(build("claude-haiku-5-5", { openai: "o" })).resolves.toBeDefined();

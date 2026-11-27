@@ -17,7 +17,7 @@ afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
 it.each(["SIGTERM", "SIGINT"] as const)("drains active ingestion before releasing the lock on %s", async signal => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "plaud-daemon-drain-"));
-  const env = { ...process.env, PLAUD_NOTES_HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: path.join(root, "engine.json") };
+  const env = { ...process.env, HOME: root, PLAUD_NOTES_HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: path.join(root, "engine.json") };
   const controller = new AbortController();
   const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
   let release!: () => void;
@@ -51,7 +51,7 @@ it.each(["SIGTERM", "SIGINT"] as const)("drains active ingestion before releasin
 
 it("continues sync-only daemon profiles with an invalid model policy", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "plaud-daemon-sync-"));
-  const env = { ...process.env, PLAUD_NOTES_HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: path.join(root, "engine.json") };
+  const env = { ...process.env, HOME: root, PLAUD_NOTES_HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: path.join(root, "engine.json") };
   const previousTerm = new Set(process.listeners("SIGTERM"));
   const previousInt = new Set(process.listeners("SIGINT"));
   const controller = new AbortController();
@@ -80,7 +80,7 @@ it("continues sync-only daemon profiles with an invalid model policy", async () 
 
 it("retains an active ingestion and changes cached engines only at the next unit", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "plaud-daemon-engine-"));
-  const env = { ...process.env, PLAUD_NOTES_HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: path.join(root, "engine.json") };
+  const env = { ...process.env, HOME: root, PLAUD_NOTES_HOME: root, TOOLBOX_SERVICE_ENGINE_FILE: path.join(root, "engine.json") };
   const write = (engine: string) => fs.writeFileSync(env.TOOLBOX_SERVICE_ENGINE_FILE, JSON.stringify({ version: 1, engine, generation: engine, updated_at: new Date().toISOString() }));
   const previousTerm = new Set(process.listeners("SIGTERM"));
   const previousInt = new Set(process.listeners("SIGINT"));

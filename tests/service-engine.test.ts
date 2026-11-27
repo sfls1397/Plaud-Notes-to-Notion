@@ -201,7 +201,7 @@ describe("subscription transport", () => {
   });
 });
 
-it("routes Plaud labels straight to the named Haiku API after service billing changes", async () => {
+it("routes Plaud labels straight to the newest Haiku the resolver names for claude-api after service billing changes", async () => {
   const f = fixture();
   f.write("claude");
   const home = vi.spyOn(os, "homedir").mockReturnValue(f.root);
@@ -216,15 +216,17 @@ it("routes Plaud labels straight to the named Haiku API after service billing ch
     await store.set("notion:p", "fixture");
     await store.set("anthropic:p", "fixture-key");
     const config = parseConfig({ profiles: { p: { owner: "Alex Example", notionDataSourceId: "0".repeat(32), startAfter: "2026-01-01T00:00:00Z" } } });
+    const resolver = path.join(f.root, "model-versions");
+    fs.writeFileSync(resolver, `#!/bin/sh\ntest "$1 $2 $3" = "resolve claude-api haiku" || exit 3\necho claude-haiku-9-9\n`, { mode: 0o700 });
     const options = { name: "p", profile: config.profiles.p, config, store, needPlaud: false, needLabeler: true,
-      env: { ...f.env, CLAUDE_SUBSCRIPTION_BIN: path.join(f.root, "absent-claude") } };
+      env: { ...f.env, CLAUDE_SUBSCRIPTION_BIN: path.join(f.root, "absent-claude"), TOOLBOX_MODEL_VERSIONS_BIN: resolver } };
     const runtime = await buildProfileRuntime(options);
     await expect(runtime.labeler.label({ owner: "Alex Example", plaudTitle: "fixture", summaryMarkdown: "",
       transcriptText: "Sam: hello", knownParticipants: [] })).resolves.toEqual({ participants: ["Sam"] });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith("https://api.anthropic.com/v1/messages", expect.objectContaining({
       headers: expect.objectContaining({ "x-api-key": "fixture-key" }),
-      body: expect.stringContaining('"model":"claude-haiku-5-5"')
+      body: expect.stringContaining('"model":"claude-haiku-9-9"')
     }));
     await store.delete("anthropic:p");
     await expect(buildProfileRuntime(options)).rejects.toThrow(/Anthropic API key/);

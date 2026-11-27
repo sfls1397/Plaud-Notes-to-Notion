@@ -20,11 +20,12 @@ export const WATCH_DAYS = 30;
 export const LLM_MAX_ATTEMPTS = 6;
 export const STATE_KEEP_DAYS = 45;
 
-export const DEFAULT_LLM_MODEL = "claude-haiku-5-5";
+export const DEFAULT_LLM_MODEL = "haiku";
 export const DEFAULT_LLM_EFFORT = "high";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
-export const isAnthropicModel = (model: string): boolean => /^claude-/i.test(model.trim());
+export const isModelFamily = (model: string): boolean => /^(?:opus|sonnet|haiku)$/i.test(model.trim());
+export const isAnthropicModel = (model: string): boolean => /^claude-/i.test(model.trim()) || isModelFamily(model);
 export const LLM_TRANSCRIPT_CHARS = 24_000;
 
 export const NOTION_VERSION = "2026-03-11";
