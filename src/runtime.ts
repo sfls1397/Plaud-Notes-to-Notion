@@ -117,11 +117,12 @@ export async function buildProfileRuntime(options: {
       const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;
       const claude = isAnthropicModel(llmModel);
       if (claude) requireClaudeCode(env);
+      const apiKey = claude && !selection.subscriptionOnly ? await anthropicFallbackKey(options.store, creds, env) : undefined;
       labeler = createLabeler({
         model: llmModel,
         effort: llmEffort,
         openaiKey: claude ? undefined : await openaiKey(options.store, creds, env),
-        anthropicKey: claude ? await anthropicFallbackKey(options.store, creds, env) : undefined,
+        anthropicKey: apiKey,
         openaiBaseUrl,
         anthropicBaseUrl,
         env

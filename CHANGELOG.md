@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Accept the subscription-only Claude billing setting (`claude-subscription-only` in `~/.toolbox/claude-service-billing-plaud`), as EdgeCore does. Labeling uses the subscription only: no Anthropic key is read, the Claude API is never called, and a usage limit holds the notes without a paid fallback. The daemon rebuilds its runtime when the setting changes, and `doctor` reports it. Unknown content in the file is still refused as an invalid policy.
 - Resolve the Claude family at launch: `llmModel` now defaults to `haiku`, and a bare family word is resolved to the newest supported release through the Toolbox `model-versions` resolver each time a recording is labeled: route `claude` for the subscription, `claude-api` for the API. A full model id in config is still used as written. A resolution failure stops labeling with an error naming route and family and never falls back to another model, family or route. The Codex service engine accepts any release of the Sol family instead of one version. `doctor` shows what the family resolves to. Existing configs that name `claude-haiku-5-5` keep it until they change to `haiku` or drop the key.
 
 ## 1.2.12

@@ -10,6 +10,7 @@ export interface ServiceSelection {
   readonly engine: "sol" | "claude";
   readonly generation: string;
   readonly claudeApi?: true;
+  readonly subscriptionOnly?: true;
 }
 
 export class ServiceModelError extends Error {
@@ -45,23 +46,31 @@ export function serviceSelection(env: NodeJS.ProcessEnv = process.env): ServiceS
   }
 }
 
-function useClaudeApi(env: NodeJS.ProcessEnv): boolean {
+export type ClaudeBilling = "default" | "api" | "subscription-only";
+
+const BILLING_MARKERS: ReadonlyArray<readonly [string, ClaudeBilling]> = [
+  ["claude-api\n", "api"],
+  ["claude-subscription-only\n", "subscription-only"]
+];
+
+export function claudeBilling(env: NodeJS.ProcessEnv): ClaudeBilling {
   const file = path.join(env.HOME || os.homedir(), ".toolbox", "claude-service-billing-plaud");
   let descriptor: number;
   try {
     descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "default";
     throw new ServiceModelError("Claude service billing policy is unreadable");
   }
   try {
-    const marker = "claude-api\n";
     const stat = fs.fstatSync(descriptor);
-    const data = Buffer.alloc(marker.length + 1);
-    if (!stat.isFile() || stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid())
-        || stat.size !== marker.length || fs.readSync(descriptor, data, 0, data.length, 0) !== marker.length
-        || data.toString("utf8", 0, marker.length) !== marker) throw new Error();
-    return true;
+    if (!stat.isFile() || stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid())) throw new Error();
+    const known = BILLING_MARKERS.find(([marker]) => marker.length === stat.size);
+    if (!known) throw new Error();
+    const data = Buffer.alloc(known[0].length + 1);
+    if (fs.readSync(descriptor, data, 0, data.length, 0) !== known[0].length
+        || data.toString("utf8", 0, known[0].length) !== known[0]) throw new Error();
+    return known[1];
   } catch {
     throw new ServiceModelError("Claude service billing policy is invalid");
   } finally {
@@ -71,8 +80,11 @@ function useClaudeApi(env: NodeJS.ProcessEnv): boolean {
 
 export function labelerSelection(model: string, env: NodeJS.ProcessEnv = process.env): ServiceSelection {
   const selection = serviceSelection(env);
-  if (selection.engine !== "claude" || !isAnthropicModel(model) || !useClaudeApi(env)) return selection;
-  return Object.freeze({ ...selection, claudeApi: true });
+  if (selection.engine !== "claude" || !isAnthropicModel(model)) return selection;
+  const billing = claudeBilling(env);
+  if (billing === "api") return Object.freeze({ ...selection, claudeApi: true });
+  if (billing === "subscription-only") return Object.freeze({ ...selection, subscriptionOnly: true });
+  return selection;
 }
 
 export interface ServiceRequest {

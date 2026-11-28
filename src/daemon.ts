@@ -120,7 +120,7 @@ export async function runDaemon(options: {
         }
         ingestReady = false;
       }
-      const selectionKey = selection ? `${selection.engine}:${selection.generation}:${selection.claudeApi === true}` : "sync-only";
+      const selectionKey = selection ? `${selection.engine}:${selection.generation}:${selection.claudeApi === true}:${selection.subscriptionOnly === true}` : "sync-only";
       if (ingestReady && t.selectionGeneration !== selectionKey) {
         t.runtime = undefined;
         t.runtimeRetryAt = 0;

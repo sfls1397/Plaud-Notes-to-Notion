@@ -132,6 +132,10 @@ async function doctor(profileName: string, store: SecretStore): Promise<number> 
         }
         requireClaudeCode(process.env);
         line(true, `Claude Code present for the Claude subscription (model ${await describeModel("claude", config.llmModel)})`);
+        if (selection.subscriptionOnly) {
+          console.log("  Subscription-only setting: no Anthropic key is read and the Claude API is never used");
+          return ok ? 0 : 1;
+        }
       } catch (err) {
         line(false, safeErrorMessage(err));
         return 1;
