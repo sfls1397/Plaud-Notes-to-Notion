@@ -222,3 +222,5 @@ can restore removed data.
 ### Claude API billing on the Mini
 
 After installing this build, `claude-side --service-billing plaud api` selects the Messages API for Claude labels. The next ingest unit uses the configured model and existing profile or shared Anthropic key. The daemon reads the choice between units. `claude-side --service-billing plaud` reads the selection and the explicit `default` argument restores the ordinary billing policy.
+
+The service also accepts a subscription-only setting: the file `~/.toolbox/claude-service-billing-plaud` holds exactly `claude-subscription-only` and a newline, owner-only (mode 0600). Labels then use the Claude subscription only. No Anthropic key is read, the Claude API is never called, and a subscription usage limit holds labeling instead of falling back to a paid call. Any other content, such as a free-text note, is refused as an invalid policy, so ingest stops visibly rather than guessing.
