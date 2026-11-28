@@ -8,6 +8,7 @@ import {
   recordedMinute
 } from "./format.js";
 import { LlmError, type Labeler } from "./llm.js";
+import { ModelResolveError } from "./model-version.js";
 import type { NotionRow, NotionStore, RowType } from "./notion.js";
 import type { PlaudClient, PlaudFileListing, PlaudRecording } from "./plaud/client.js";
 import { redactCardsAcross } from "./card.js";
@@ -171,6 +172,7 @@ async function processOne(deps: IngestDeps, file: PlaudFileListing, st: FileStat
         result.pending++;
         return "limit";
       }
+      if (err instanceof ModelResolveError) throw err;
       st.llmAttempts++;
       if (deps.labeler.allowFallback === false) throw err;
       if (st.llmAttempts < LLM_MAX_ATTEMPTS) {

@@ -110,7 +110,8 @@ export async function buildProfileRuntime(options: {
       labeler = new AnthropicLabeler({
         apiKey: await anthropicKey(options.store, creds, env),
         model: options.config.llmModel,
-        baseUrl: options.config.anthropicBaseUrl
+        baseUrl: options.config.anthropicBaseUrl,
+        env
       });
     } else {
       const { llmModel, llmEffort, openaiBaseUrl, anthropicBaseUrl } = options.config;

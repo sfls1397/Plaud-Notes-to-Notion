@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Resolve the Claude family at launch: `llmModel` now defaults to `haiku`, and a bare family word is resolved to the newest supported release through the Toolbox `model-versions` resolver each time a recording is labeled: route `claude` for the subscription, `claude-api` for the API. A full model id in config is still used as written. A resolution failure stops labeling with an error naming route and family and never falls back to another model, family or route. The Codex service engine accepts any release of the Sol family instead of one version. `doctor` shows what the family resolves to. Existing configs that name `claude-haiku-5-5` keep it until they change to `haiku` or drop the key.
+
 ## 1.2.12
 
 - Add a service-only Claude API billing choice. Changes take effect between ingest units and keep the configured model and its existing Anthropic key.

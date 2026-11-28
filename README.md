@@ -2,7 +2,7 @@
 
 ## Manual service engine
 
-With the coordinated Toolbox adapter installed, `toolbox engine use sol` selects Codex `gpt-6.1-sol` on the managed ChatGPT subscription. `toolbox engine use claude` restores this application's configured provider/model (normally Claude Haiku), and `toolbox engine status` reports selection. The daemon snapshots policy between ingestion units, so running work is unchanged and no restart is required for later switches. Sol does not require an LLM API key and never falls back automatically. Malformed policy or failed subscription transport stops labeling rather than writing guessed participants. Install the adapter once using the normal safe daemon deployment procedure before switching.
+With the coordinated Toolbox adapter installed, `toolbox engine use sol` selects the newest Codex Sol release on the managed ChatGPT subscription. `toolbox engine use claude` restores this application's configured provider/model (normally Claude Haiku), and `toolbox engine status` reports selection. The daemon snapshots policy between ingestion units, so running work is unchanged and no restart is required for later switches. Sol does not require an LLM API key and never falls back automatically. Malformed policy or failed subscription transport stops labeling rather than writing guessed participants. Install the adapter once using the normal safe daemon deployment procedure before switching.
 
 A small macOS background service (LaunchAgent) that copies finished
 [Plaud](https://www.plaud.ai/) recordings into a Notion database. For each
@@ -58,7 +58,7 @@ to one Notion database; profiles differ only in *who* and *where*:
 {
   "pollSeconds": 30,
   "syncSeconds": 300,
-  "llmModel": "claude-haiku-5-5",
+  "llmModel": "haiku",
   "profiles": {
     "alex":   { "enabled": true,  "owner": "Alex Example",   "notionDataSourceId": "<data source id>", "startAfter": "2026-01-01T00:00:00Z" },
     "morgan": { "enabled": false, "owner": "Morgan Example", "notionDataSourceId": "<data source id>", "startAfter": "2026-01-01T00:00:00Z" }
@@ -76,10 +76,20 @@ to one Notion database; profiles differ only in *who* and *where*:
 
 ### LLM (participant labeling)
 
-`llmModel` picks the provider: `claude-*` → the Claude subscription through
+`llmModel` picks the provider: `claude-*` or a bare Claude family word
+(`haiku`) → the Claude subscription through
 headless Claude Code (`~/.local/bin/claude`, signed in with `claude /login`, or
 `CLAUDE_SUBSCRIPTION_BIN`), anything else → OpenAI Responses API (key `openai`).
-Default is `claude-haiku-5-5`. The Anthropic key (`anthropic`) is optional and
+Default is `haiku`: the newest supported Claude Haiku, which the Toolbox resolver
+names for the route in use (`model-versions resolve claude haiku` for the
+subscription, `model-versions resolve claude-api haiku` for the API; found
+through `TOOLBOX_MODEL_VERSIONS_BIN`, else
+`~/.toolbox/runner/bin/model-versions`) each time a recording is labeled, so a
+new Haiku release is used with no change here and no restart. If the resolver
+cannot answer, labeling stops with an error naming the route and family, the
+recording stays pending, and nothing falls back to another model, family or
+route. A full model id in `llmModel` is an explicit choice and is used as
+written. The Anthropic key (`anthropic`) is optional and
 used only while the subscription is at its plan usage limit: the same model on
 the Anthropic Messages API for 15 minutes, then the subscription again. A
 session or 5-hour limit waits for the subscription; a server throttle or a bare
@@ -100,7 +110,7 @@ Why it works this way:
 
 | Want | `config.json` | Key needed |
 | --- | --- | --- |
-| Claude Haiku (default) | omit `llmModel`, or `"llmModel": "claude-haiku-5-5"` | Claude Code signed in to the Claude subscription; `set-secret anthropic` only for the usage-limit fallback |
+| Newest Claude Haiku (default) | omit `llmModel`, or `"llmModel": "haiku"` | Claude Code signed in to the Claude subscription; `set-secret anthropic` only for the usage-limit fallback |
 | OpenAI | e.g. `"llmModel": "gpt-6-luna", "llmEffort": "high"` | `set-secret openai` |
 
 `llmEffort` only applies to OpenAI. Claude requests use high effort, automatic
